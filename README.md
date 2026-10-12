@@ -80,8 +80,9 @@ docker compose version
 1. Clonar o repositório e acessar a pasta do projeto:
 
 ```bash
-git clone https://github.com/Anavalerianob/compiladores-trabalho1.git
-cd compiladores-trabalho1
+git clone https://github.com/Anavalerianob/compiladores-minic.git
+cd compiladores-minic
+
 ```
 
 2. Construir as imagens e subir os contêineres:
