@@ -1,0 +1,11 @@
+{
+  "name": "minic-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/interface.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1"
+  }
+}
