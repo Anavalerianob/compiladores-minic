@@ -50,6 +50,16 @@ Tratamentos realizados pelo scanner:
 | Literal numérico malformado (`3.`, `3.5.2`, `12abc`, `1.2x`) | Um único erro léxico cujo lexema é o trecho inteiro; nenhum token é gerado para esse trecho. |
 | Código com erro sintático, mas com tokens válidos (por exemplo, `int = = ; if else )`) | Tokenizado normalmente, sem erros, pois a verificação da estrutura cabe à análise sintática. |
 
+Elementos de C que não fazem parte do subconjunto e comportamento atual do scanner:
+
+| Elemento | Exemplos | Comportamento |
+|---|---|---|
+| Literais de string e de caractere | `"a"`, `'c'` | As aspas são informadas como erros léxicos, e o conteúdo é reconhecido como identificador |
+| Operadores lógicos | `&&`, `\|\|`, `!` | Cada caractere é informado como erro léxico (no caso de `!`, com orientação sobre `!=`) |
+| Colchetes | `[`, `]` | Informados como erros léxicos |
+| Outras palavras reservadas de C | `while`, `return`, `for` | Reconhecidas como identificadores, pois não pertencem à tabela de palavras reservadas do subconjunto |
+| Diretivas de pré-processador | `#include` | O caractere `#` é informado como erro léxico, e `include` é reconhecido como identificador |
+
 Todos os erros são acumulados, e a análise prossegue após cada um deles. A mensagem de cada erro segue o formato `Erro léxico na linha L, coluna C: <descrição>`, como em `Erro léxico na linha 1, coluna 3: caractere não reconhecido '@'. Verifique se ele faz parte do subconjunto suportado.`
 
 ## Scanner
