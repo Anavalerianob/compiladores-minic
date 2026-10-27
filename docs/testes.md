@@ -27,29 +27,35 @@ Total de testes automatizados: 45 aprovados e 0 reprovados.
 
 ### Ambiente de execução
 
-Os testes desta etapa foram executados fora dos contêineres, pois a máquina de desenvolvimento não dispunha de Docker nem de curl. O backend foi testado com Python 3.14.4 em um ambiente virtual com as versões fixadas em `requirements.txt` (Flask 3.0.3 e pytest 8.3.3), e o frontend, com Node.js 22.11.0 e jsdom 25.0.1. A imagem Docker do backend utiliza Python 3.12, de modo que os testes devem ser repetidos dentro do contêiner.
+Durante o desenvolvimento, os testes foram executados fora dos contêineres, pois a máquina ainda não dispunha de Docker nem de curl: o backend com Python 3.14.4 em um ambiente virtual com as versões fixadas em `requirements.txt` (Flask 3.0.3 e pytest 8.3.3), e o frontend com Node.js 22.11.0 e jsdom 25.0.1. Após a instalação do Docker 29.1.3, do Docker Compose 2.40.3, do curl 8.18.0 e do Node.js 22.22.1, todos os conjuntos foram executados novamente, e os resultados abaixo correspondem a essa execução final. Os testes do backend foram executados no contêiner, com Python 3.12.16.
 
 ### Resultados
 
 | Funcionalidade | Tipo de teste | Comando | Aprovados | Reprovados |
 |---|---|---|---|---|
-| Scanner: palavras reservadas, identificadores, literais, operadores, delimitadores, comentários, espaços, linha e coluna, erros, bordas e transições | Unitário | `cd backend && pytest -v tests/test_scanner.py` | 77 | 0 |
-| Validação da entrada | Unitário | `cd backend && pytest -v tests/test_api.py` | 7 | 0 |
-| Endpoints, tratamento de erros e regressão da etapa 2 | Endpoint e regressão | `cd backend && pytest -v tests/test_api.py` | 14 | 0 |
-| Integração do scanner ao endpoint: contrato completo, erro léxico com HTTP 200, código só com comentário, entrada vazia sem tokens e exceção no scanner | Endpoint | `cd backend && pytest -v tests/test_api.py` | 5 | 0 |
+| Scanner: palavras reservadas, identificadores, literais, operadores, delimitadores, comentários, espaços, linha e coluna, erros, bordas e transições | Unitário | `docker compose run --rm backend pytest -v tests/test_scanner.py` | 77 | 0 |
+| Validação da entrada | Unitário | `docker compose run --rm backend pytest -v` | 7 | 0 |
+| Endpoints, tratamento de erros e regressão da etapa 2 | Endpoint e regressão | `docker compose run --rm backend pytest -v` | 14 | 0 |
+| Integração do scanner ao endpoint: contrato completo, erro léxico com HTTP 200, código só com comentário, entrada vazia sem tokens e exceção no scanner | Endpoint | `docker compose run --rm backend pytest -v` | 5 | 0 |
 | Tela principal, exemplos, validação e comunicação (etapa 2, com mocks atualizados) | Interface e regressão | `cd frontend && npm install && npm test` | 20 | 0 |
 | Funções auxiliares, seção de análise, tabela, destaque, contagem, erros, passo a passo, reprodução, estados da tela e segurança | Interface | `cd frontend && npm install && npm test` | 22 | 0 |
-| Interface, proxy e scanner em execução nos contêineres | Implantação | `sh tests/implantacao.sh` | Não executado | Não executado |
+| Interface, proxy e scanner em execução nos contêineres | Implantação | `sh tests/implantacao.sh` | 7 | 0 |
 
-A execução completa do backend (`cd backend && pytest -v`) resultou em 103 testes aprovados e 0 reprovados, e a do frontend (`npm test`), em 42 aprovados e 0 reprovados. Total de testes automatizados executados: 145 aprovados e 0 reprovados.
+A execução completa do backend (`docker compose run --rm backend pytest -v`) resultou em 103 testes aprovados e 0 reprovados, a do frontend (`cd frontend && npm install && npm test`), em 42 aprovados e 0 reprovados, e a de implantação, em 7 verificações aprovadas e 0 reprovadas. Total: 152 verificações automatizadas aprovadas e 0 reprovadas.
 
 O conjunto de interface da etapa 2 passou de 19 para 20 testes porque o teste de carregamento é gerado para cada exemplo, e foi acrescentado o exemplo de comentários.
+
+### Validação em instalação limpa
+
+Foram executados, em sequência, `docker compose down --rmi all`, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy` e o frontend em execução com a porta `8080:80` publicada. Em seguida, `sh tests/implantacao.sh` apresentou as 7 verificações aprovadas, e `docker compose run --rm backend pytest -v` apresentou 103 testes aprovados.
+
+A primeira tentativa falhou por permissão de acesso ao Docker (`permission denied` em `/var/run/docker.sock`), pois o usuário havia sido incluído no grupo `docker` sem iniciar uma nova sessão; também faltava o plugin `docker-buildx`. Após a instalação do plugin e a reinicialização do sistema, a sequência foi executada sem erros. Não houve alteração no código do projeto em decorrência dessa falha.
 
 ### Verificações complementares
 
 1. Fluxo com o backend real: a interface (`index.html` e `app.js`) foi carregada no jsdom e conectada ao Flask em execução local, sem simulação do servidor. Para os cinco exemplos, a seção de análise foi exibida, o texto do código destacado coincidiu com o código enviado, e a quantidade de linhas da tabela coincidiu com a de tokens. No Exemplo 5, foram destacados os erros `7.5.1` (linha 2, coluna 15), `@` (linha 3, coluna 15) e `/*` (linha 4, coluna 1); as colunas foram conferidas manualmente, caractere a caractere.
 2. Navegador real: o frontend foi servido por um servidor Python local que repassa `/api/` ao Flask, reproduzindo o comportamento do `nginx.conf`, e foi aberto no navegador Brave em modo headless, controlado pelo protocolo DevTools. Com o Exemplo 5, verificou-se: seção oculta antes da análise; mensagem com estilo de erro; 15 linhas na tabela; avanço pelo teclado (seta para a direita); seleção pelo clique na tabela; reprodução automática na velocidade rápida até o token 15, com o botão retornando a "Reproduzir"; e ausência de erros no console. Na largura de 390 pixels, o documento não apresentou rolagem horizontal e os botões de controle ocuparam a largura disponível, com altura mínima de 44 pixels. As capturas de tela foram inspecionadas visualmente.
-3. Condições do teste de implantação: com o mesmo servidor local, as requisições a `/`, `/app.js` e `/api/saude` retornaram 200; a resposta para `int numero = 10;` continha `"lexema":"numero"`, e a resposta para `int a = 5 @ 2;` continha `"sucesso":false`. Essa verificação foi realizada com Python, e não com o script `tests/implantacao.sh`, cuja sintaxe foi apenas conferida com `sh -n`.
+3. Navegador real com os contêineres: o mesmo roteiro do item anterior foi repetido em `http://localhost:8080`, com o frontend servido pelo Nginx do contêiner, e produziu os mesmos resultados, inclusive as três mensagens de erro do Exemplo 5 e a ausência de erros no console.
 
 ### Falhas encontradas e correções
 
@@ -65,7 +71,5 @@ O conjunto de interface da etapa 2 passou de 19 para 20 testes porque o teste de
 
 ### Limitações e pendências
 
-1. A construção das imagens e a execução via Docker Compose (`docker compose down --rmi all`, `docker compose build --no-cache`, `docker compose up -d`, `docker compose ps` e `docker compose run --rm backend pytest -v`) não foram realizadas, pois o Docker não estava instalado na máquina de desenvolvimento.
-2. O script `tests/implantacao.sh` não foi executado, pois depende do curl e dos contêineres em execução. Suas condições foram verificadas de forma equivalente, conforme descrito acima.
-3. O fluxo no navegador foi validado com um servidor local equivalente ao Nginx, e não com o contêiner do frontend; essa validação deve ser repetida em `http://localhost:8080` com o Docker Compose.
-4. Os testes de interface utilizam o jsdom e simulam o servidor; a verificação em navegador real foi realizada por um script local e não faz parte dos testes automatizados do repositório.
+1. Os testes de interface utilizam o jsdom e simulam o servidor; a verificação em navegador real foi realizada por um script local, que controlou o navegador em modo headless, e não faz parte dos testes automatizados do repositório.
+2. O arquivo `frontend/package-lock.json`, gerado pelo `npm install`, não é versionado, como na etapa 2; por isso, a versão do jsdom instalada pode variar dentro da faixa `^25.0.1`.

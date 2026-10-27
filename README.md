@@ -326,9 +326,9 @@ O teste de implantação verifica se a interface está acessível, se o backend 
 | Backend: scanner (unitários) | 77 | 0 |
 | Backend: validação, endpoints e regressão | 26 | 0 |
 | Frontend: interface e comunicação simulada | 42 | 0 |
-| Implantação (7 verificações) | Execução pendente | Execução pendente |
+| Implantação | 7 | 0 |
 
-Os testes do backend e do frontend foram executados fora dos contêineres. O teste de implantação e a validação via Docker Compose ainda não foram executados nesta etapa, conforme registrado em `docs/testes.md`, que também detalha as falhas encontradas, as correções e as alterações intencionais de comportamento.
+Os testes do backend foram executados no contêiner (Python 3.12) após a construção das imagens do zero, e os do frontend, com Node.js 22. O registro detalhado, incluindo a validação em instalação limpa, as falhas encontradas, as correções e as alterações intencionais de comportamento, encontra-se em `docs/testes.md`.
 
 ## Validação de instalação limpa
 
