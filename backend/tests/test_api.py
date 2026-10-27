@@ -73,7 +73,8 @@ def test_analisar_codigo_valido(cliente):
     assert resposta.status_code == 200
     corpo = resposta.get_json()
     assert corpo["recebido"] is True
-    assert corpo["mensagem"] == "Código recebido com sucesso."
+    # Alteracao intencional da etapa 3 (antes: "Código recebido com sucesso."); ver docs/testes.md.
+    assert corpo["mensagem"] == "Análise léxica concluída sem erros: 8 token(s) reconhecido(s)."
     assert corpo["linhas"] == 2
     assert corpo["caracteres"] == len("int numero = 10;\nfloat b;")
 
@@ -144,6 +145,68 @@ def test_erro_inesperado_nao_expoe_detalhes(cliente, monkeypatch):
         raise RuntimeError("segredo interno /app/validacao.py")
 
     monkeypatch.setattr(modulo_app, "validar_requisicao", falhar)
+    resposta = cliente.post("/api/analisar", json={"codigo": "int a;"})
+    assert resposta.status_code == 500
+    texto = resposta.get_data(as_text=True)
+    assert "segredo" not in texto
+    assert "Traceback" not in texto
+    assert resposta.get_json() == {"erro": "Ocorreu um erro inesperado no servidor."}
+
+
+# Testes da integracao com o scanner (etapa 3)
+
+def test_analisar_contrato_completo(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int numero = 10;"})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert set(corpo) == {"recebido", "sucesso", "mensagem", "linhas", "caracteres", "tokens", "erros"}
+    assert corpo["recebido"] is True
+    assert corpo["sucesso"] is True
+    assert corpo["mensagem"] == "Análise léxica concluída sem erros: 5 token(s) reconhecido(s)."
+    assert corpo["linhas"] == 1
+    assert corpo["caracteres"] == 16
+    assert corpo["erros"] == []
+    assert [(t["tipo"], t["lexema"]) for t in corpo["tokens"]] == [
+        ("PALAVRA_RESERVADA", "int"), ("IDENTIFICADOR", "numero"), ("OPERADOR", "="),
+        ("LITERAL_INTEIRO", "10"), ("DELIMITADOR", ";"),
+    ]
+    for token in corpo["tokens"]:
+        assert set(token) == {"tipo", "lexema", "linha", "coluna", "transicoes"}
+    assert corpo["tokens"][1]["coluna"] == 5
+
+
+def test_analisar_erro_lexico_retorna_200_com_sucesso_falso(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int a = 5 @ 2;"})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert corpo["sucesso"] is False
+    assert corpo["mensagem"] == "Análise léxica concluída com 1 erro(s) léxico(s) e 6 token(s) reconhecido(s)."
+    assert len(corpo["erros"]) == 1
+    erro = corpo["erros"][0]
+    assert set(erro) == {"tipo", "lexema", "linha", "coluna", "mensagem"}
+    assert (erro["tipo"], erro["lexema"], erro["linha"], erro["coluna"]) == ("ERRO_LEXICO", "@", 1, 11)
+
+
+def test_analisar_apenas_comentario(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "// apenas um comentario"})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert corpo["sucesso"] is True
+    assert corpo["tokens"] == []
+    assert corpo["erros"] == []
+
+
+def test_analisar_codigo_vazio_nao_retorna_tokens(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": ""})
+    assert resposta.status_code == 400
+    assert "tokens" not in resposta.get_json()
+
+
+def test_erro_no_scanner_nao_expoe_detalhes(cliente, monkeypatch):
+    def falhar(_codigo):
+        raise RuntimeError("segredo interno /app/scanner.py")
+
+    monkeypatch.setattr(modulo_app, "analisar_lexico", falhar)
     resposta = cliente.post("/api/analisar", json={"codigo": "int a;"})
     assert resposta.status_code == 500
     texto = resposta.get_data(as_text=True)
