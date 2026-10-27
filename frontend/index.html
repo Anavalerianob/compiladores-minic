@@ -54,12 +54,88 @@
     .resultado.sucesso { background: #e6f4ea; color: #1e6b34; }
     .resultado.erro { background: #fdecea; color: #a12622; }
     .resultado.info { background: #e8f0fe; color: #1a4c9c; }
+    .fase { margin: -16px 0 16px; font-weight: 600; color: #1a4c9c; }
+    details { margin: 0 0 8px; padding: 8px 12px; background: #f7f9fc; border: 1px solid #dde3ea; border-radius: 4px; }
+    summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+    details ol { padding-left: 20px; }
+    button, select { min-height: 44px; }
+    a:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible,
+    summary:focus-visible, tr:focus-visible, pre:focus-visible {
+      outline: 3px solid #f59f00;
+      outline-offset: 2px;
+    }
+    h2 { margin: 32px 0 8px; font-size: 1.3rem; }
+    h3 { margin: 20px 0 8px; font-size: 1.05rem; }
+    .lista-contagem { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .lista-contagem li { white-space: nowrap; }
+    .codigo-destacado {
+      margin: 0;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fafafa;
+      font-family: "Courier New", Consolas, monospace;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .tk { border-radius: 3px; padding: 0 1px; }
+    .tk-PALAVRA_RESERVADA { background: #efe6fb; color: #5a2d9c; font-weight: 700; }
+    .tk-IDENTIFICADOR { background: #e3eefa; color: #0b4a85; }
+    .tk-LITERAL_INTEIRO { background: #fdf0dc; color: #7a4100; }
+    .tk-LITERAL_REAL { background: #dff3ef; color: #00594d; }
+    .tk-OPERADOR { background: #fbe6ef; color: #96004f; }
+    .tk-DELIMITADOR { background: #ececec; color: #333; }
+    .tk-erro {
+      background: #fdecea;
+      color: #a12622;
+      text-decoration: underline wavy #a12622;
+      text-underline-offset: 3px;
+    }
+    .codigo-destacado .atual { outline: 3px solid #111; outline-offset: 1px; }
+    .controles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .controles button { margin-top: 0; }
+    .controles label { display: inline; margin: 0 0 0 8px; }
+    .controles select { width: auto; }
+    button[aria-disabled="true"] { background: #8aaee8; cursor: not-allowed; }
+    .passo-info { margin-top: 12px; padding: 12px; border-left: 4px solid #1f6feb; background: #f7f9fc; }
+    .passo-info p { margin: 0 0 6px; }
+    .passo-info ol { margin: 0; padding-left: 32px; font-family: "Courier New", Consolas, monospace; }
+    .tabela-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    caption { text-align: left; color: #555; padding-bottom: 6px; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: left; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f2f6fc; }
+    tbody tr.atual { background: #fff3bf; font-weight: 700; }
+    #lista-erros { padding-left: 20px; }
+    #lista-erros li { margin-bottom: 6px; }
+    @media (max-width: 600px) {
+      body { padding: 12px 8px; }
+      main { padding: 16px; }
+      .controles { flex-direction: column; align-items: stretch; }
+      .controles button, .controles select { width: 100%; }
+      .controles label { margin: 8px 0 0; }
+      button#analisar { width: 100%; }
+    }
   </style>
 </head>
 <body>
   <main>
     <h1>MiniC Analisador</h1>
     <p class="subtitulo">Software educacional de compiladores. Linguagem analisada: subconjunto da linguagem C (MiniC).</p>
+    <p class="fase">Fase disponível: análise léxica (scanner)</p>
+
+    <details>
+      <summary>Como usar e o que é análise léxica</summary>
+      <p>A análise léxica é a primeira fase de um compilador. O scanner lê o código caractere a caractere e o agrupa em tokens, que são as menores unidades com significado da linguagem. O trecho de texto que forma um token é chamado de lexema: em <code>int numero = 10;</code>, o lexema <code>numero</code> forma um token da categoria identificador, e o lexema <code>10</code> forma um literal inteiro. Espaços e comentários são descartados, e caracteres que não pertencem ao subconjunto são informados como erros léxicos, com linha e coluna.</p>
+      <ol>
+        <li>Escreva um programa ou selecione um dos exemplos.</li>
+        <li>Clique em Analisar.</li>
+        <li>Consulte a contagem, o código destacado por categoria, a tabela de tokens e a lista de erros.</li>
+        <li>Use o passo a passo (botões ou setas esquerda e direita) para ver as transições do autômato que reconheceram cada token.</li>
+      </ol>
+    </details>
 
     <label for="exemplos">Exemplos de programas</label>
     <select id="exemplos">
@@ -67,7 +143,8 @@
       <option value="declaracao">Exemplo 1: Declaração e inicialização de variáveis</option>
       <option value="aritmetica">Exemplo 2: Operações aritméticas</option>
       <option value="condicional">Exemplo 3: Estrutura condicional</option>
-      <option value="erro">Exemplo 4: Código com erro intencional</option>
+      <option value="comentarios">Exemplo 4: Comentários e operadores relacionais</option>
+      <option value="erro">Exemplo 5: Código com erros léxicos</option>
     </select>
 
     <label for="codigo">Código-fonte</label>
@@ -77,6 +154,45 @@
 
     <label for="resultado">Resultado</label>
     <div id="resultado" class="resultado" role="status" aria-live="polite">Nenhuma análise realizada.</div>
+
+    <section id="analise-lexica" aria-labelledby="titulo-analise" hidden>
+      <h2 id="titulo-analise">Análise léxica</h2>
+
+      <h3>Resumo</h3>
+      <div id="contagem"></div>
+
+      <h3>Código destacado por categoria</h3>
+      <pre id="codigo-destacado" class="codigo-destacado" tabindex="0" aria-label="Código com os tokens destacados por categoria"></pre>
+
+      <h3>Passo a passo do autômato</h3>
+      <p>Use os botões ou as setas esquerda e direita do teclado para percorrer os tokens.</p>
+      <div class="controles">
+        <button id="passo-anterior" type="button">Anterior</button>
+        <button id="passo-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
+        <button id="passo-proximo" type="button">Próximo</button>
+        <label for="passo-velocidade">Velocidade</label>
+        <select id="passo-velocidade">
+          <option value="lenta">Lenta</option>
+          <option value="normal" selected>Normal</option>
+          <option value="rapida">Rápida</option>
+        </select>
+      </div>
+      <div id="passo-info" class="passo-info" aria-live="polite"></div>
+
+      <h3>Tabela de tokens</h3>
+      <div class="tabela-container">
+        <table>
+          <caption>Clique em uma linha (ou pressione Enter sobre ela) para vê-la no passo a passo.</caption>
+          <thead>
+            <tr><th scope="col">#</th><th scope="col">Categoria</th><th scope="col">Lexema</th><th scope="col">Linha</th><th scope="col">Coluna</th></tr>
+          </thead>
+          <tbody id="corpo-tokens"></tbody>
+        </table>
+      </div>
+
+      <h3>Erros léxicos</h3>
+      <ul id="lista-erros"></ul>
+    </section>
   </main>
 
   <script src="app.js"></script>
