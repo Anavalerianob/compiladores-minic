@@ -29,6 +29,16 @@ verificar "Envio de codigo valido" "$codigo" "200"
 codigo=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{"codigo":""}' "$URL/api/analisar")
 verificar "Rejeicao de codigo vazio" "$codigo" "400"
 
+contem() {
+  if printf '%s' "$1" | grep -q "$2"; then echo "sim"; else echo "nao"; fi
+}
+
+corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{"codigo":"int numero = 10;"}' "$URL/api/analisar")
+verificar "Scanner retorna tokens via proxy" "$(contem "$corpo" '"lexema":"numero"')" "sim"
+
+corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{"codigo":"int a = 5 @ 2;"}' "$URL/api/analisar")
+verificar "Scanner informa erro lexico via proxy" "$(contem "$corpo" '"sucesso":false')" "sim"
+
 echo ""
 if [ "$FALHAS" -eq 0 ]; then
   echo "Todos os testes de implantacao passaram."
