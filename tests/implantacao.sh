@@ -39,6 +39,12 @@ verificar "Scanner retorna tokens via proxy" "$(contem "$corpo" '"lexema":"numer
 corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{"codigo":"int a = 5 @ 2;"}' "$URL/api/analisar")
 verificar "Scanner informa erro lexico via proxy" "$(contem "$corpo" '"sucesso":false')" "sim"
 
+corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{"codigo":"int resultado = 10 + 5 * 2;"}' "$URL/api/analisar")
+verificar "Parser monta a AST com a multiplicacao" "$(contem "$corpo" '"MULTIPLICACAO"')" "sim"
+
+corpo=$(curl -s -X POST -H "Content-Type: application/json" -d '{"codigo":"int x = 5"}' "$URL/api/analisar")
+verificar "Parser reporta erro sintatico" "$(contem "$corpo" '"ERRO_SINTATICO"')" "sim"
+
 echo ""
 if [ "$FALHAS" -eq 0 ]; then
   echo "Todos os testes de implantacao passaram."

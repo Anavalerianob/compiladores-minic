@@ -4,6 +4,7 @@ from werkzeug.exceptions import HTTPException
 from scanner import analisar as analisar_lexico
 from parser import analisar_sintaxe
 from validacao import validar_requisicao
+import ia
 
 app = Flask(__name__)
 
@@ -92,6 +93,21 @@ def analisar():
         lexico=lexico,
         sintatico=sintatico,
     ), 200
+
+
+@app.post("/api/ia/explicar")
+def explicar_com_ia():
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify(erro="Requisição inválida: envie um objeto JSON."), 400
+
+    status, corpo = ia.gerar_explicacao(
+        dados.get("tipo"),
+        dados.get("codigo"),
+        dados.get("alvo"),
+        dados.get("pergunta"),
+    )
+    return jsonify(corpo), status
 
 
 @app.errorhandler(404)
