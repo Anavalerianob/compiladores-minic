@@ -7,7 +7,7 @@ const { JSDOM } = require("jsdom");
 const {
   EXEMPLOS, MENSAGENS, validarCodigo, iniciar, nomeCategoria, formatarTransicao,
   contarPorCategoria, indicePorPosicao, montarSegmentos,
-  categoriaNo, raizesDoPasso, tiposDaAst, exportarAst
+  categoriaNo, raizesDoPasso, tiposDaAst, exportarAst, enviarPergunta
 } = require("../app.js");
 
 const HTML = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
@@ -434,7 +434,9 @@ test("erros léxicos são listados, destacados e usam o estilo de erro", async (
   assert.match(tela.resultado.textContent, /1 erro\(s\) léxico\(s\)/);
   const itens = tela.doc.querySelectorAll("#lista-erros li");
   assert.strictEqual(itens.length, 1);
-  assert.strictEqual(itens[0].textContent, MENSAGEM_ERRO_ARROBA);
+  assert.strictEqual(itens[0].querySelector("p").textContent, MENSAGEM_ERRO_ARROBA);
+  // Cada erro léxico ganha um botão de explicação com IA.
+  assert.ok(itens[0].querySelector("button.botao-ia"));
   const erro = tela.doc.querySelector("#codigo-destacado .tk-erro");
   assert.strictEqual(erro.textContent, "@");
   assert.match(tela.doc.getElementById("contagem").textContent, /Erros léxicos: 1/);
@@ -835,6 +837,153 @@ test("uma árvore grande é renderizada sem quebrar", async () => {
   assert.strictEqual(itensArvore(tela).length, total);
 });
 
+// Testes das explicações com IA (etapa 4, diferencial)
+
+async function tick() {
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+function montarTelaIa(explicarFn) {
+  return montarTela(function (url, opcoes) {
+    if (url.indexOf("/api/ia/") !== -1) return explicarFn(url, opcoes);
+    return respostaPrecedencia();
+  });
+}
+
+async function prepararAstIa(explicarFn) {
+  const tela = montarTelaIa(explicarFn);
+  tela.campo.value = "int resultado = 10 + 5 * 2;";
+  await clicarEAguardar(tela);
+  return tela;
+}
+
+function selecionarAdicao(tela) {
+  const adicao = Array.from(itensArvore(tela)).find((li) => li.dataset.tipo === "ADICAO");
+  adicao.querySelector(".no-linha").dispatchEvent(tela.evento("click"));
+  return adicao;
+}
+
+function chamadaIa(tela) {
+  return tela.chamadas.find((c) => c.url === "/api/ia/explicar");
+}
+
+test("enviarPergunta trata sucesso e erro do endpoint de IA", async () => {
+  const ok = await enviarPergunta({ tipo: "PERGUNTA", codigo: "int x;", pergunta: "?" },
+    async () => respostaJson(200, { explicacao: "ok", modelo: "llama3.2", geradoPorIA: true }));
+  assert.strictEqual(ok.tipo, "sucesso");
+  assert.strictEqual(ok.explicacao, "ok");
+  const erro = await enviarPergunta({}, async () => respostaJson(503, { erro: "indisponível" }));
+  assert.strictEqual(erro.tipo, "erro");
+  assert.match(erro.texto, /indisponível/);
+});
+
+test("o botão de IA do nó envia o tipo e o alvo certos e exibe a resposta", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "A multiplicação tem prioridade.", modelo: "llama3.2", geradoPorIA: true }));
+  selecionarAdicao(tela);
+  const botao = tela.doc.querySelector("#no-detalhes button.botao-ia");
+  assert.ok(botao);
+  botao.click();
+  await tick(); await tick();
+  const corpo = JSON.parse(chamadaIa(tela).opcoes.body);
+  assert.strictEqual(corpo.tipo, "NO_AST");
+  assert.strictEqual(corpo.alvo, 5);   // id do nó ADICAO em "int resultado = 10 + 5 * 2;"
+  assert.strictEqual(corpo.codigo, "int resultado = 10 + 5 * 2;");
+  assert.match(tela.doc.getElementById("ia-resposta").textContent, /prioridade/);
+});
+
+test("durante a espera o botão fica desabilitado e aparece o carregamento", async () => {
+  let resolver;
+  const tela = await prepararAstIa(() => new Promise((r) => {
+    resolver = () => r(respostaJson(200, { explicacao: "Pronto.", modelo: "llama3.2", geradoPorIA: true }));
+  }));
+  selecionarAdicao(tela);
+  const botao = tela.doc.querySelector("#no-detalhes button.botao-ia");
+  botao.click();
+  await tick();
+  assert.match(tela.doc.getElementById("ia-resposta").textContent, /Gerando explicação/);
+  assert.strictEqual(botao.disabled, true);
+  assert.strictEqual(tela.doc.getElementById("ia-enviar").disabled, true);
+  resolver();
+  await tick(); await tick();
+  assert.strictEqual(botao.disabled, false);
+  assert.match(tela.doc.getElementById("ia-resposta").textContent, /Pronto/);
+});
+
+test("a resposta da IA é exibida como texto, em parágrafos, com o aviso fixo", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "Primeira parte.\n\n<b>Segunda</b> parte.", modelo: "llama3.2", geradoPorIA: true }));
+  selecionarAdicao(tela);
+  tela.doc.querySelector("#no-detalhes button.botao-ia").click();
+  await tick(); await tick();
+  const resposta = tela.doc.getElementById("ia-resposta");
+  assert.strictEqual(resposta.querySelectorAll("p").length, 2);
+  assert.strictEqual(resposta.querySelector("b"), null);
+  assert.match(resposta.textContent, /<b>Segunda<\/b> parte\./);
+  assert.match(tela.doc.querySelector(".ia-aviso").textContent, /Pode conter erros/);
+});
+
+test("erros 503, 504 e falha de rede mostram mensagens claras no painel de IA", async () => {
+  const casos = [
+    { fn: () => respostaJson(503, { erro: "O assistente de IA está indisponível no momento." }), regex: /indisponível/ },
+    { fn: () => respostaJson(504, { erro: "O assistente de IA demorou demais para responder." }), regex: /demorou demais/ },
+    { fn: () => { throw new TypeError("Failed to fetch"); }, regex: /comunicar com o servidor/ }
+  ];
+  for (const caso of casos) {
+    const tela = await prepararAstIa(caso.fn);
+    selecionarAdicao(tela);
+    tela.doc.querySelector("#no-detalhes button.botao-ia").click();
+    await tick(); await tick();
+    const resposta = tela.doc.getElementById("ia-resposta");
+    assert.match(resposta.textContent, caso.regex);
+    assert.strictEqual(resposta.className, "ia-erro");
+  }
+});
+
+test("a análise continua utilizável quando a IA falha", async () => {
+  const tela = await prepararAstIa(() => respostaJson(503, { erro: "indisponível" }));
+  selecionarAdicao(tela);
+  tela.doc.querySelector("#no-detalhes button.botao-ia").click();
+  await tick(); await tick();
+  assert.strictEqual(itensArvore(tela).length, 7);
+  assert.strictEqual(tela.linhasTabela().length, 9);
+});
+
+test("o professor virtual envia a sugestão clicada como pergunta", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "Resposta.", modelo: "llama3.2", geradoPorIA: true }));
+  const sugestao = tela.doc.querySelector("#ia-sugestoes button");
+  assert.ok(sugestao);
+  sugestao.click();
+  await tick(); await tick();
+  const corpo = JSON.parse(chamadaIa(tela).opcoes.body);
+  assert.strictEqual(corpo.tipo, "PERGUNTA");
+  assert.ok(corpo.pergunta.length > 0);
+});
+
+test("o botão perguntar envia o texto digitado como pergunta", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "Resposta.", modelo: "llama3.2", geradoPorIA: true }));
+  tela.doc.getElementById("ia-pergunta").value = "O que é um token?";
+  tela.doc.getElementById("ia-enviar").click();
+  await tick(); await tick();
+  const corpo = JSON.parse(chamadaIa(tela).opcoes.body);
+  assert.strictEqual(corpo.tipo, "PERGUNTA");
+  assert.strictEqual(corpo.pergunta, "O que é um token?");
+});
+
+test("o botão de IA aparece nos erros sintáticos e léxicos", async () => {
+  const sint = montarTela(respostaErroSintatico);
+  sint.campo.value = "if (a > 0 {";
+  await clicarEAguardar(sint);
+  assert.ok(sint.doc.querySelector("#lista-erros-sintaticos button.botao-ia"));
+
+  const lex = montarTela(respostaComErro);
+  lex.campo.value = "int a = 5 @ 2;";
+  await clicarEAguardar(lex);
+  assert.ok(lex.doc.querySelector("#lista-erros button.botao-ia"));
+});
+
 // Teste de segurança
 
 test("lexemas e mensagens com marcação HTML são exibidos como texto", async () => {
@@ -854,5 +1003,6 @@ test("lexemas e mensagens com marcação HTML são exibidos como texto", async (
   assert.strictEqual(tela.doc.querySelector("#analise-lexica img"), null);
   assert.strictEqual(tela.linhasTabela()[0].querySelector("code").textContent, "<b>x</b>");
   assert.match(tela.info.textContent, /lexema '<b>x<\/b>'/);
-  assert.strictEqual(tela.doc.querySelector("#lista-erros li").textContent, "<img src=x onerror=alert(1)>");
+  assert.strictEqual(tela.doc.querySelector("#lista-erros li p").textContent, "<img src=x onerror=alert(1)>");
+  assert.strictEqual(tela.doc.querySelector("#lista-erros li img"), null);
 });

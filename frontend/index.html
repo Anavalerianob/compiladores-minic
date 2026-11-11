@@ -161,6 +161,18 @@
     #sintatico-situacao:not(:empty) {
       margin: 8px 0; padding: 12px; border-left: 4px solid #1a4c9c; background: #e8f0fe; color: #1a4c9c;
     }
+    .ia-aviso { font-size: 0.85rem; color: #6b5200; background: #fff8e1; padding: 6px 10px; border-radius: 4px; }
+    #ia-resposta:not(:empty) {
+      margin: 8px 0; padding: 12px; border: 1px solid #dde3ea; border-radius: 4px; background: #fbfcfe;
+    }
+    #ia-resposta p { margin: 0 0 8px; }
+    #ia-resposta.ia-erro { background: #fdecea; color: #a12622; border-color: #f2c2c0; }
+    .ia-sugestoes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .ia-sugestoes button, .botao-ia {
+      margin-top: 0; padding: 6px 12px; font-size: 0.9rem; background: #5a2d9c;
+    }
+    .botao-ia { margin-top: 8px; }
+    button:disabled, .ia-sugestoes button:disabled { background: #9aa4b2; cursor: wait; }
     @media (max-width: 600px) {
       body { padding: 12px 8px; }
       main { padding: 16px; }
@@ -318,6 +330,20 @@ primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao
         </div>
 
         <div id="no-detalhes" aria-live="polite"></div>
+      </section>
+
+      <section id="ia-area">
+        <h3>Explicações com IA (opcional)</h3>
+        <p>Um assistente de IA local (Llama 3.2, pelo Ollama) pode explicar os resultados. A análise não depende dele: se estiver desligado, tokens, AST e erros continuam funcionando.</p>
+        <p class="ia-aviso">Explicação gerada por IA (Llama 3.2). Pode conter erros; o resultado oficial é o do compilador.</p>
+        <div id="ia-resposta" role="status" aria-live="polite"></div>
+
+        <h3>Professor virtual</h3>
+        <p>Pergunte sobre conceitos da análise sintática ou clique em uma sugestão:</p>
+        <div id="ia-sugestoes" class="ia-sugestoes"></div>
+        <label for="ia-pergunta">Sua pergunta</label>
+        <textarea id="ia-pergunta" rows="2" maxlength="500" placeholder="Ex.: qual a diferença entre o scanner e o parser?"></textarea>
+        <button id="ia-enviar" type="button">Perguntar ao professor virtual</button>
       </section>
     </section>
   </main>

@@ -93,8 +93,20 @@ const MENSAGENS = {
   semErros: "Nenhum erro léxico encontrado.",
   semTokens: "Nenhum token reconhecido.",
   astVazia: "O programa não tem comandos nem declarações: a AST tem apenas o nó Programa.",
-  semArvore: "Sem árvore para mostrar."
+  semArvore: "Sem árvore para mostrar.",
+  iaCarregando: "Gerando explicação...",
+  iaSemCodigo: "Analise um código antes de pedir uma explicação."
 };
+
+// Sugestoes do professor virtual (perguntas prontas sobre a analise sintatica).
+const SUGESTOES_IA = [
+  "Qual a diferença entre o scanner e o parser?",
+  "O que são terminais e não terminais em uma gramática?",
+  "Qual a diferença entre a AST e a árvore de derivação?",
+  "Como funciona a precedência de operadores no MiniC?",
+  "O que é um parser descendente recursivo?",
+  "O que é recursão à esquerda e por que evitá-la?"
+];
 
 const ROTULOS_PAPEL = {
   item: "item do programa ou bloco",
@@ -245,6 +257,34 @@ async function enviarCodigo(codigo, fetchFn) {
   return { tipo: "erro", texto: MENSAGENS.inesperado };
 }
 
+async function enviarPergunta(corpo, fetchFn) {
+  let resposta;
+  try {
+    resposta = await fetchFn("/api/ia/explicar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo)
+    });
+  } catch (_erro) {
+    return { tipo: "erro", texto: MENSAGENS.comunicacao };
+  }
+
+  let dados;
+  try {
+    dados = await resposta.json();
+  } catch (_erro) {
+    return { tipo: "erro", texto: MENSAGENS.inesperado };
+  }
+
+  if (resposta.ok && dados && typeof dados.explicacao === "string" && dados.explicacao !== "") {
+    return { tipo: "sucesso", explicacao: dados.explicacao };
+  }
+  if (dados && dados.erro) {
+    return { tipo: "erro", texto: dados.erro };
+  }
+  return { tipo: "erro", texto: MENSAGENS.inesperado };
+}
+
 function iniciar(doc, fetchFn, temporizador) {
   const relogio = temporizador || {
     definir: function (funcao, intervalo) { return setInterval(funcao, intervalo); },
@@ -284,8 +324,13 @@ function iniciar(doc, fetchFn, temporizador) {
   const astVelocidade = doc.getElementById("ast-velocidade");
   const astCompletaBtn = doc.getElementById("ast-arvore-completa");
   const astPassoInfo = doc.getElementById("ast-passo-info");
+  const iaResposta = doc.getElementById("ia-resposta");
+  const iaPergunta = doc.getElementById("ia-pergunta");
+  const iaEnviar = doc.getElementById("ia-enviar");
+  const iaSugestoes = doc.getElementById("ia-sugestoes");
 
   let analise = null;
+  let iaOcupado = false;
   let atual = -1;
   let reproducao = null;
 
@@ -348,7 +393,8 @@ function iniciar(doc, fetchFn, temporizador) {
       elemento("p", "Token " + (atual + 1) + " de " + n + ": lexema '" + token.lexema + "' na linha " + token.linha + ", coluna " + token.coluna),
       elemento("p", "Categoria: " + nomeCategoria(token.tipo) + ". " + (categoria ? categoria.explicacao : "")),
       elemento("p", "Transições do autômato:"),
-      transicoes
+      transicoes,
+      botaoIa("Explicar com IA", { tipo: "TOKEN", alvo: atual })
     );
   }
 
@@ -473,8 +519,11 @@ function iniciar(doc, fetchFn, temporizador) {
       listaErros.replaceChildren(elemento("li", MENSAGENS.semErros));
       return;
     }
-    listaErros.replaceChildren.apply(listaErros, analise.erros.map(function (erro) {
-      return elemento("li", erro.mensagem);
+    listaErros.replaceChildren.apply(listaErros, analise.erros.map(function (erro, indice) {
+      const item = doc.createElement("li");
+      item.appendChild(elemento("p", erro.mensagem, "erro-campo"));
+      item.appendChild(botaoIa("Entender erro com IA", { tipo: "ERRO_LEXICO", alvo: indice }));
+      return item;
     }));
   }
 
@@ -517,6 +566,8 @@ function iniciar(doc, fetchFn, temporizador) {
 
   function exibirSintatico(sintatico) {
     astPausar();
+    iaResposta.replaceChildren();
+    iaResposta.className = "";
     situacao.textContent = "";
     listaErrosSint.replaceChildren();
     secaoErrosSint.hidden = true;
@@ -552,7 +603,7 @@ function iniciar(doc, fetchFn, temporizador) {
   function renderizarErrosSintaticos(lista) {
     secaoErrosSint.hidden = false;
     const fragmento = doc.createDocumentFragment();
-    for (const erro of lista) {
+    lista.forEach(function (erro, indice) {
       const item = doc.createElement("li");
       item.appendChild(elemento("span", "Erro sintático", "erro-rotulo"));
       item.appendChild(elemento("p", erro.mensagem, "erro-campo"));
@@ -561,8 +612,9 @@ function iniciar(doc, fetchFn, temporizador) {
       }
       if (erro.encontrado) item.appendChild(campoErro("Encontrado: ", erro.encontrado));
       if (erro.regra) item.appendChild(campoErro("Regra violada: ", erro.regra));
+      item.appendChild(botaoIa("Entender erro com IA", { tipo: "ERRO_SINTATICO", alvo: indice }));
       fragmento.appendChild(item);
-    }
+    });
     listaErrosSint.replaceChildren(fragmento);
   }
 
@@ -702,7 +754,10 @@ function iniciar(doc, fetchFn, temporizador) {
     if (atributos.length > 0) {
       par("Atributos", atributos.map(function (k) { return k + ": " + no.atributos[k]; }).join(", "));
     }
-    noDetalhes.replaceChildren(elemento("h3", "Nó selecionado"), dl);
+    noDetalhes.replaceChildren(
+      elemento("h3", "Nó selecionado"), dl,
+      botaoIa("Explicar com IA", { tipo: "NO_AST", alvo: no.id })
+    );
   }
 
   // Navegacao por teclado na arvore.
@@ -854,6 +909,71 @@ function iniciar(doc, fetchFn, temporizador) {
     astReproduzirBtn.setAttribute("aria-pressed", "true");
   }
 
+  // ----- Explicações com IA -----
+  // A interface nunca fala com o Ollama: só chama /api/ia/explicar.
+
+  function botaoIa(texto, opcoes) {
+    const botao = elemento("button", texto, "botao-ia");
+    botao.type = "button";
+    botao.addEventListener("click", function () {
+      pedirExplicacao(Object.assign({ botao: botao }, opcoes));
+    });
+    return botao;
+  }
+
+  async function pedirExplicacao(opcoes) {
+    if (iaOcupado) return;
+    const codigo = (analise && analise.codigo) || campo.value;
+    if (!codigo || codigo.trim() === "") {
+      mostrarIaResposta({ tipo: "erro", texto: MENSAGENS.iaSemCodigo });
+      return;
+    }
+    iaOcupado = true;
+    const botao = opcoes.botao || null;
+    if (botao) botao.disabled = true;
+    iaEnviar.disabled = true;
+    iaResposta.className = "";
+    iaResposta.replaceChildren(elemento("p", MENSAGENS.iaCarregando));
+    try {
+      const corpo = { tipo: opcoes.tipo, codigo: codigo };
+      if (opcoes.alvo !== undefined && opcoes.alvo !== null) corpo.alvo = opcoes.alvo;
+      if (opcoes.pergunta) corpo.pergunta = opcoes.pergunta;
+      const retorno = await enviarPergunta(corpo, fetchFn);
+      mostrarIaResposta(retorno);
+    } finally {
+      iaOcupado = false;
+      if (botao) botao.disabled = false;
+      iaEnviar.disabled = false;
+    }
+  }
+
+  function mostrarIaResposta(retorno) {
+    if (retorno.tipo === "sucesso") {
+      iaResposta.className = "";
+      const paragrafos = retorno.explicacao.split(/\n\s*\n|\n/).filter(function (t) { return t.trim() !== ""; });
+      const frag = doc.createDocumentFragment();
+      for (const texto of paragrafos) frag.appendChild(elemento("p", texto));
+      iaResposta.replaceChildren(frag);
+    } else {
+      iaResposta.className = "ia-erro";
+      iaResposta.replaceChildren(elemento("p", retorno.texto));
+    }
+  }
+
+  function montarSugestoesIa() {
+    const frag = doc.createDocumentFragment();
+    for (const pergunta of SUGESTOES_IA) {
+      const botao = elemento("button", pergunta);
+      botao.type = "button";
+      botao.addEventListener("click", function () {
+        iaPergunta.value = pergunta;
+        pedirExplicacao({ tipo: "PERGUNTA", pergunta: pergunta, botao: botao });
+      });
+      frag.appendChild(botao);
+    }
+    iaSugestoes.replaceChildren(frag);
+  }
+
   // Eventos
 
   anterior.addEventListener("click", voltar);
@@ -883,6 +1003,11 @@ function iniciar(doc, fetchFn, temporizador) {
       astReproducao = relogio.definir(astPassoAutomatico, VELOCIDADES[astVelocidade.value] || VELOCIDADES.normal);
     }
   });
+
+  iaEnviar.addEventListener("click", function () {
+    pedirExplicacao({ tipo: "PERGUNTA", pergunta: iaPergunta.value, botao: iaEnviar });
+  });
+  montarSugestoesIa();
 
   secao.addEventListener("keydown", function (evento) {
     if (evento.target.tagName === "SELECT" || !analise) return;
@@ -940,9 +1065,9 @@ function iniciar(doc, fetchFn, temporizador) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    EXEMPLOS, MENSAGENS, CATEGORIAS, CATEGORIAS_NO, VELOCIDADES, validarCodigo, nomeCategoria,
-    formatarTransicao, contarPorCategoria, indicePorPosicao, montarSegmentos, categoriaNo,
-    raizesDoPasso, aplanarAst, tiposDaAst, exportarAst, enviarCodigo, iniciar
+    EXEMPLOS, MENSAGENS, CATEGORIAS, CATEGORIAS_NO, SUGESTOES_IA, VELOCIDADES, validarCodigo,
+    nomeCategoria, formatarTransicao, contarPorCategoria, indicePorPosicao, montarSegmentos,
+    categoriaNo, raizesDoPasso, aplanarAst, tiposDaAst, exportarAst, enviarCodigo, enviarPergunta, iniciar
   };
 } else {
   document.addEventListener("DOMContentLoaded", function () {
