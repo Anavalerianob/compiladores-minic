@@ -110,6 +110,57 @@
     tbody tr.atual { background: #fff3bf; font-weight: 700; }
     #lista-erros { padding-left: 20px; }
     #lista-erros li { margin-bottom: 6px; }
+    .desatualizada { opacity: 0.55; }
+    .aviso-desatualizada {
+      margin: 0 0 8px; padding: 6px 10px; border-left: 4px solid #b38600;
+      background: #fff8e1; color: #6b5200; font-weight: 600;
+    }
+    /* Arvore da AST */
+    .arvore-container { overflow-x: auto; padding: 4px 2px; }
+    ul.arvore, ul.arvore ul { list-style: none; margin: 0; padding: 0; }
+    ul.arvore ul { margin-left: 20px; border-left: 1px dashed #cdd5df; padding-left: 10px; }
+    ul.arvore li { margin: 2px 0; }
+    li[aria-expanded="false"] > ul[role="group"] { display: none; }
+    .no-linha {
+      display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
+      padding: 2px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+    }
+    .no-linha:hover { background: #f2f6fc; }
+    li[aria-selected="true"] > .no-linha { background: #fff3bf; outline: 2px solid #b38600; }
+    li.no-criado > .no-linha { outline: 2px solid #1f6feb; }
+    li.esmaecido > .no-linha { opacity: 0.35; }
+    .no-alternar {
+      display: inline-block; width: 18px; text-align: center; color: #555; user-select: none;
+    }
+    .no-rotulo { font-weight: 600; }
+    .no-marca { font-size: 0.75rem; padding: 1px 6px; border-radius: 10px; border: 1px solid transparent; }
+    .marca-Programa { background: #ececec; color: #333; border-color: #ccc; }
+    .marca-Declaracao { background: #efe6fb; color: #5a2d9c; border-color: #d6c3f0; }
+    .marca-Comando { background: #e3eefa; color: #0b4a85; border-color: #bcd6f2; }
+    .marca-Operacao { background: #fbe6ef; color: #96004f; border-color: #f2c2d8; }
+    .marca-Valor { background: #fdf0dc; color: #7a4100; border-color: #f0d6ab; }
+    .tk.no-destaque, span.no-destaque { outline: 3px solid #1f6feb; outline-offset: 1px; border-radius: 3px; }
+    tbody tr.no-destaque { background: #dbeafe; }
+    #no-detalhes {
+      margin-top: 12px; padding: 12px; border: 1px solid #dde3ea; border-radius: 4px; background: #f7f9fc;
+    }
+    #no-detalhes dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+    #no-detalhes dt { font-weight: 600; color: #444; }
+    #no-detalhes dd { margin: 0; overflow-wrap: anywhere; }
+    .ast-ferramentas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .ast-ferramentas button { margin-top: 0; }
+    .ast-ferramentas label { display: inline; margin: 0 4px 0 8px; }
+    .ast-ferramentas select { width: auto; min-width: 160px; }
+    #lista-erros-sintaticos { list-style: none; padding: 0; }
+    #lista-erros-sintaticos li {
+      margin-bottom: 10px; padding: 10px; border-left: 4px solid #a12622; background: #fdecea; border-radius: 4px;
+    }
+    .erro-rotulo { display: inline-block; font-weight: 700; color: #a12622; margin-bottom: 4px; }
+    .erro-campo { margin: 2px 0; }
+    .erro-campo .chave { font-weight: 600; }
+    #sintatico-situacao:not(:empty) {
+      margin: 8px 0; padding: 12px; border-left: 4px solid #1a4c9c; background: #e8f0fe; color: #1a4c9c;
+    }
     @media (max-width: 600px) {
       body { padding: 12px 8px; }
       main { padding: 16px; }
@@ -117,6 +168,10 @@
       .controles button, .controles select { width: 100%; }
       .controles label { margin: 8px 0 0; }
       button#analisar { width: 100%; }
+      .ast-ferramentas { flex-direction: column; align-items: stretch; }
+      .ast-ferramentas button, .ast-ferramentas select { width: 100%; }
+      .ast-ferramentas label { margin: 8px 0 0; }
+      #no-detalhes dl { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -124,7 +179,7 @@
   <main>
     <h1>MiniC Analisador</h1>
     <p class="subtitulo">Software educacional de compiladores. Linguagem analisada: subconjunto da linguagem C (MiniC).</p>
-    <p class="fase">Fase disponível: análise léxica (scanner)</p>
+    <p class="fase">Fases disponíveis: análise léxica (scanner) e análise sintática (parser e AST)</p>
 
     <details>
       <summary>Como usar e o que é análise léxica</summary>
@@ -145,6 +200,9 @@
       <option value="condicional">Exemplo 3: Estrutura condicional</option>
       <option value="comentarios">Exemplo 4: Comentários e operadores relacionais</option>
       <option value="erro">Exemplo 5: Código com erros léxicos</option>
+      <option value="precedencia">Exemplo 6: Precedência e associatividade (AST)</option>
+      <option value="aninhado">Exemplo 7: if, else if e else com blocos aninhados</option>
+      <option value="erro_sintatico">Exemplo 8: Código com erros sintáticos</option>
     </select>
 
     <label for="codigo">Código-fonte</label>
@@ -192,6 +250,75 @@
 
       <h3>Erros léxicos</h3>
       <ul id="lista-erros"></ul>
+    </section>
+
+    <section id="analise-sintatica" aria-labelledby="titulo-sintatica" hidden>
+      <h2 id="titulo-sintatica">Análise sintática e AST</h2>
+
+      <details>
+        <summary>O que é análise sintática e AST</summary>
+        <p>A análise sintática é a segunda fase do compilador. O parser recebe a sequência de tokens do scanner e verifica se ela segue a gramática da linguagem, que define como os tokens podem ser combinados. Quando a sequência é válida, o parser constrói a árvore sintática abstrata (AST), uma representação em árvore da estrutura do programa.</p>
+        <p>Há três estruturas que não se confundem. A sequência de tokens é o que o scanner reconheceu, em ordem. A árvore de derivação mostraria cada regra da gramática aplicada e todos os terminais, inclusive <code>;</code> e os parênteses. A AST guarda só o que importa para o significado: em <code>int x = (1 + 2) * 3;</code>, os parênteses não viram nó (eles apenas mudam a forma da árvore) e o <code>;</code> também não aparece; fica uma multiplicação cujo filho esquerdo é uma adição. Este projeto exibe a AST; não exibe a árvore de derivação.</p>
+      </details>
+
+      <details>
+        <summary>Gramática do MiniC (EBNF)</summary>
+        <pre class="codigo-destacado">programa        = { item } FIM ;
+item            = declaracao | comando ;
+declaracao      = tipo declarador { "," declarador } ";" ;
+declarador      = IDENTIFICADOR [ "=" expressao ] ;
+tipo            = "int" | "float" ;
+comando         = atribuicao | condicional | bloco ;
+atribuicao      = IDENTIFICADOR "=" expressao ";" ;
+condicional     = "if" "(" expressao ")" bloco [ "else" ( bloco | condicional ) ] ;
+bloco           = "{" { item } "}" ;
+expressao       = aditiva [ op_relacional aditiva ] ;
+op_relacional   = "==" | "!=" | "&lt;" | "&lt;=" | "&gt;" | "&gt;=" ;
+aditiva         = multiplicativa { ( "+" | "-" ) multiplicativa } ;
+multiplicativa  = unaria { ( "*" | "/" ) unaria } ;
+unaria          = "-" unaria | primaria ;
+primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao ")" ;</pre>
+      </details>
+
+      <div id="sintatico-situacao" role="status" aria-live="polite"></div>
+
+      <section id="secao-erros-sintaticos" hidden>
+        <h3>Erros sintáticos</h3>
+        <ul id="lista-erros-sintaticos"></ul>
+      </section>
+
+      <section id="secao-arvore" hidden>
+        <h3>Árvore sintática abstrata (AST)</h3>
+        <div class="ast-ferramentas">
+          <button id="ast-expandir" type="button">Expandir tudo</button>
+          <button id="ast-recolher" type="button">Recolher tudo</button>
+          <label for="ast-filtro">Filtrar por tipo</label>
+          <select id="ast-filtro"><option value="">Todos os nós</option></select>
+          <button id="ast-exportar" type="button">Exportar AST (JSON)</button>
+        </div>
+
+        <h3>Construção passo a passo</h3>
+        <p>Veja a ordem em que o parser criou os nós (os filhos antes do pai). Use os botões ou as setas para cima e para baixo do teclado para navegar na árvore.</p>
+        <div class="controles">
+          <button id="ast-anterior" type="button">Anterior</button>
+          <button id="ast-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
+          <button id="ast-proximo" type="button">Próximo</button>
+          <label for="ast-velocidade">Velocidade</label>
+          <select id="ast-velocidade">
+            <option value="lenta">Lenta</option>
+            <option value="normal" selected>Normal</option>
+            <option value="rapida">Rápida</option>
+          </select>
+          <button id="ast-arvore-completa" type="button">Árvore completa</button>
+        </div>
+        <div id="ast-passo-info" class="passo-info" aria-live="polite"></div>
+
+        <div class="arvore-container">
+          <ul id="arvore-ast" class="arvore" role="tree" aria-label="Árvore sintática abstrata do programa"></ul>
+        </div>
+
+        <div id="no-detalhes" aria-live="polite"></div>
+      </section>
     </section>
   </main>
 

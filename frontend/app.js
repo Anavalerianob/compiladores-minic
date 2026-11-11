@@ -18,8 +18,71 @@ const EXEMPLOS = {
   erro: {
     titulo: "Exemplo 5: Código com erros léxicos",
     codigo: "int total = 10;\nfloat media = 7.5.1;\nint x = total @ 2;\n/* comentário sem fechamento\nint y = 0;"
+  },
+  precedencia: {
+    titulo: "Exemplo 6: Precedência e associatividade (AST)",
+    codigo: "int resultado = 10 + 5 * 2;\nint r = 20 - 5 - 3;\nint m = (10 + 5) * 2;"
+  },
+  aninhado: {
+    titulo: "Exemplo 7: if, else if e else com blocos aninhados",
+    codigo: "if (a > 0) {\n    int x = 1;\n    if (x < 10) {\n        x = x + 1;\n    } else {\n        x = 0;\n    }\n} else if (a < 0) {\n    int y = 2;\n} else {\n    int z = 3;\n}"
+  },
+  erro_sintatico: {
+    titulo: "Exemplo 8: Código com erros sintáticos",
+    codigo: "int a = 10;\nif (a > 0 {\n    a = 1;\n}\nb = ;"
   }
 };
+
+// Categoria exibida junto do rotulo de cada no da AST (marca em texto).
+const CATEGORIAS_NO = {
+  PROGRAMA: { marca: "Programa", classe: "marca-Programa" },
+  DECLARACAO_VARIAVEL: { marca: "Declaração", classe: "marca-Declaracao" },
+  ATRIBUICAO: { marca: "Comando", classe: "marca-Comando" },
+  CONDICIONAL: { marca: "Comando", classe: "marca-Comando" },
+  BLOCO: { marca: "Comando", classe: "marca-Comando" },
+  ADICAO: { marca: "Operação", classe: "marca-Operacao" },
+  SUBTRACAO: { marca: "Operação", classe: "marca-Operacao" },
+  MULTIPLICACAO: { marca: "Operação", classe: "marca-Operacao" },
+  DIVISAO: { marca: "Operação", classe: "marca-Operacao" },
+  COMPARACAO: { marca: "Operação", classe: "marca-Operacao" },
+  NEGACAO: { marca: "Operação", classe: "marca-Operacao" },
+  IDENTIFICADOR: { marca: "Valor", classe: "marca-Valor" },
+  LITERAL_INTEIRO: { marca: "Valor", classe: "marca-Valor" },
+  LITERAL_REAL: { marca: "Valor", classe: "marca-Valor" }
+};
+
+function categoriaNo(tipo) {
+  return CATEGORIAS_NO[tipo] || { marca: tipo, classe: "marca-Programa" };
+}
+
+// Lista, em ordem, os nos cuja ordem de criacao e menor ou igual a passo. Como os
+// filhos sao criados antes do pai (pos-ordem), um no com ordem <= passo tem toda a
+// subarvore ja criada; devolvemos as raizes dessas subarvores.
+function raizesDoPasso(no, passo) {
+  if (no.ordem <= passo) return [no];
+  let raizes = [];
+  for (const filho of no.filhos) raizes = raizes.concat(raizesDoPasso(filho, passo));
+  return raizes;
+}
+
+function aplanarAst(no, saida) {
+  saida = saida || [];
+  saida.push(no);
+  for (const filho of no.filhos) aplanarAst(filho, saida);
+  return saida;
+}
+
+function tiposDaAst(no) {
+  const vistos = [];
+  for (const atual of aplanarAst(no)) {
+    if (vistos.indexOf(atual.tipo) === -1) vistos.push(atual.tipo);
+  }
+  return vistos;
+}
+
+function exportarAst(ast) {
+  return JSON.stringify(ast, null, 2);
+}
 
 const MENSAGENS = {
   vazio: "Informe um código-fonte antes de solicitar a análise.",
@@ -28,7 +91,21 @@ const MENSAGENS = {
   inesperado: "Ocorreu um erro inesperado. Tente novamente mais tarde.",
   alterado: "O código foi alterado depois da última análise. Clique em Analisar para atualizar os tokens.",
   semErros: "Nenhum erro léxico encontrado.",
-  semTokens: "Nenhum token reconhecido."
+  semTokens: "Nenhum token reconhecido.",
+  astVazia: "O programa não tem comandos nem declarações: a AST tem apenas o nó Programa.",
+  semArvore: "Sem árvore para mostrar."
+};
+
+const ROTULOS_PAPEL = {
+  item: "item do programa ou bloco",
+  tipo: "tipo",
+  valor: "valor (expressão atribuída)",
+  esquerda: "operando à esquerda",
+  direita: "operando à direita",
+  operando: "operando",
+  condicao: "condição",
+  entao: "bloco executado quando a condição é verdadeira (então)",
+  senao: "bloco ou condicional do else (senão)"
 };
 
 const CATEGORIAS = {
@@ -154,10 +231,12 @@ async function enviarCodigo(codigo, fetchFn) {
     if (!Array.isArray(dados.tokens) || !Array.isArray(dados.erros)) {
       return { tipo: "erro", texto: MENSAGENS.inesperado };
     }
+    const sintatico = dados.sintatico || null;
+    const erroSintatico = sintatico && sintatico.executado && !sintatico.sucesso;
     return {
-      tipo: dados.sucesso ? "sucesso" : "erro",
+      tipo: dados.sucesso && !erroSintatico ? "sucesso" : "erro",
       texto: dados.mensagem + " Linhas: " + dados.linhas + ". Caracteres: " + dados.caracteres + ".",
-      analise: { codigo: codigo, tokens: dados.tokens, erros: dados.erros }
+      analise: { codigo: codigo, tokens: dados.tokens, erros: dados.erros, sintatico: sintatico }
     };
   }
   if (resposta.status === 400 && dados && dados.erro) {
@@ -187,9 +266,37 @@ function iniciar(doc, fetchFn, temporizador) {
   const reproduzir = doc.getElementById("passo-reproduzir");
   const velocidade = doc.getElementById("passo-velocidade");
 
+  // Elementos da analise sintatica (etapa 4).
+  const secaoSintatica = doc.getElementById("analise-sintatica");
+  const situacao = doc.getElementById("sintatico-situacao");
+  const secaoErrosSint = doc.getElementById("secao-erros-sintaticos");
+  const listaErrosSint = doc.getElementById("lista-erros-sintaticos");
+  const secaoArvore = doc.getElementById("secao-arvore");
+  const arvore = doc.getElementById("arvore-ast");
+  const noDetalhes = doc.getElementById("no-detalhes");
+  const astFiltro = doc.getElementById("ast-filtro");
+  const astExpandir = doc.getElementById("ast-expandir");
+  const astRecolher = doc.getElementById("ast-recolher");
+  const astExportar = doc.getElementById("ast-exportar");
+  const astAnteriorBtn = doc.getElementById("ast-anterior");
+  const astProximoBtn = doc.getElementById("ast-proximo");
+  const astReproduzirBtn = doc.getElementById("ast-reproduzir");
+  const astVelocidade = doc.getElementById("ast-velocidade");
+  const astCompletaBtn = doc.getElementById("ast-arvore-completa");
+  const astPassoInfo = doc.getElementById("ast-passo-info");
+
   let analise = null;
   let atual = -1;
   let reproducao = null;
+
+  // Estado da arvore da AST.
+  let astRaiz = null;
+  let nosPorId = {};
+  let nosPorOrdem = {};
+  let totalNos = 0;
+  let noSelecionado = null;
+  let astPasso = null;       // null = arvore completa; k = passo da construcao
+  let astReproducao = null;
 
   function mostrar(tipo, texto) {
     resultado.textContent = texto;
@@ -375,6 +482,8 @@ function iniciar(doc, fetchFn, temporizador) {
     pausar();
     analise = dados;
     atual = 0;
+    secao.classList.remove("desatualizada");
+    secaoSintatica.classList.remove("desatualizada");
     renderizarContagem();
     renderizarCodigo();
     renderizarTabela();
@@ -386,13 +495,363 @@ function iniciar(doc, fetchFn, temporizador) {
       atualizarControles();
       atualizarInfo();
     }
+    exibirSintatico(dados.sintatico);
   }
 
   function ocultarAnalise() {
     pausar();
+    astPausar();
     analise = null;
     atual = -1;
+    astRaiz = null;
     secao.hidden = true;
+    secaoSintatica.hidden = true;
+  }
+
+  // ----- Analise sintatica e AST -----
+
+  function limparDestaqueAst() {
+    for (const el of destacado.querySelectorAll(".no-destaque")) el.classList.remove("no-destaque");
+    for (const el of corpoTokens.querySelectorAll(".no-destaque")) el.classList.remove("no-destaque");
+  }
+
+  function exibirSintatico(sintatico) {
+    astPausar();
+    situacao.textContent = "";
+    listaErrosSint.replaceChildren();
+    secaoErrosSint.hidden = true;
+    secaoArvore.hidden = true;
+    noDetalhes.replaceChildren();
+    astRaiz = null;
+    noSelecionado = null;
+    limparDestaqueAst();
+
+    if (!sintatico) {
+      secaoSintatica.hidden = true;
+      return;
+    }
+    secaoSintatica.hidden = false;
+
+    if (!sintatico.executado) {
+      situacao.textContent = sintatico.motivo ||
+        "A análise sintática não foi executada porque há erros léxicos. Corrija-os e analise novamente.";
+      return;
+    }
+
+    if (!sintatico.sucesso) {
+      situacao.textContent = "O código tem erros sintáticos. A AST não foi construída.";
+      renderizarErrosSintaticos(sintatico.erros || []);
+      return;
+    }
+
+    astRaiz = sintatico.ast;
+    situacao.textContent = "";
+    prepararArvore();
+  }
+
+  function renderizarErrosSintaticos(lista) {
+    secaoErrosSint.hidden = false;
+    const fragmento = doc.createDocumentFragment();
+    for (const erro of lista) {
+      const item = doc.createElement("li");
+      item.appendChild(elemento("span", "Erro sintático", "erro-rotulo"));
+      item.appendChild(elemento("p", erro.mensagem, "erro-campo"));
+      if (Array.isArray(erro.esperado) && erro.esperado.length > 0) {
+        item.appendChild(campoErro("Esperado: ", traduzirEsperado(erro.esperado)));
+      }
+      if (erro.encontrado) item.appendChild(campoErro("Encontrado: ", erro.encontrado));
+      if (erro.regra) item.appendChild(campoErro("Regra violada: ", erro.regra));
+      fragmento.appendChild(item);
+    }
+    listaErrosSint.replaceChildren(fragmento);
+  }
+
+  function campoErro(chave, valor) {
+    const p = elemento("p", undefined, "erro-campo");
+    p.append(elemento("span", chave, "chave"), doc.createTextNode(valor));
+    return p;
+  }
+
+  function traduzirEsperado(esperado) {
+    const nomes = { IDENTIFICADOR: "um identificador", LITERAL_INTEIRO: "um número inteiro", LITERAL_REAL: "um número real" };
+    return esperado.map(function (item) { return nomes[item] || "'" + item + "'"; }).join(", ");
+  }
+
+  // Monta o indice de nos e prepara a arvore completa.
+  function prepararArvore() {
+    nosPorId = {};
+    nosPorOrdem = {};
+    const planos = aplanarAst(astRaiz);
+    totalNos = planos.length;
+    for (const no of planos) {
+      nosPorId[no.id] = no;
+      nosPorOrdem[no.ordem] = no;
+    }
+    prepararFiltro();
+    secaoArvore.hidden = false;
+    astPasso = null;
+    montarArvore([astRaiz], null);
+    astPassoInfo.replaceChildren(elemento("p",
+      "Árvore completa: " + totalNos + " nó(s). Use Próximo ou as setas para ver a construção passo a passo."));
+    atualizarControlesAst();
+  }
+
+  function prepararFiltro() {
+    const opcoes = [elemento("option", "Todos os nós")];
+    opcoes[0].value = "";
+    for (const tipo of tiposDaAst(astRaiz)) {
+      const op = elemento("option", tipo);
+      op.value = tipo;
+      opcoes.push(op);
+    }
+    astFiltro.replaceChildren.apply(astFiltro, opcoes);
+  }
+
+  function criarNoElemento(no, nivel, ordemDestaque) {
+    const li = doc.createElement("li");
+    li.setAttribute("role", "treeitem");
+    li.setAttribute("aria-level", String(nivel));
+    li.dataset.id = String(no.id);
+    li.dataset.tipo = no.tipo;
+    li.dataset.ordem = String(no.ordem);
+    li.tabIndex = -1;
+    if (ordemDestaque !== null && no.ordem === ordemDestaque) li.classList.add("no-criado");
+
+    const linha = elemento("div", undefined, "no-linha");
+    const temFilhos = no.filhos.length > 0;
+    const alternar = elemento("span", temFilhos ? "▾" : "", "no-alternar");
+    const cat = categoriaNo(no.tipo);
+    linha.append(
+      alternar,
+      elemento("span", no.rotulo, "no-rotulo"),
+      elemento("span", cat.marca, "no-marca " + cat.classe)
+    );
+    li.appendChild(linha);
+
+    if (temFilhos) {
+      li.setAttribute("aria-expanded", "true");
+      const grupo = doc.createElement("ul");
+      grupo.setAttribute("role", "group");
+      for (const filho of no.filhos) grupo.appendChild(criarNoElemento(filho, nivel + 1, ordemDestaque));
+      li.appendChild(grupo);
+      alternar.addEventListener("click", function (evento) {
+        evento.stopPropagation();
+        alternarExpansao(li);
+      });
+    }
+
+    linha.addEventListener("click", function () { selecionarNo(no.id); });
+    return li;
+  }
+
+  function montarArvore(raizes, ordemDestaque) {
+    const fragmento = doc.createDocumentFragment();
+    for (const raiz of raizes) fragmento.appendChild(criarNoElemento(raiz, 1, ordemDestaque));
+    arvore.replaceChildren(fragmento);
+    const primeiro = arvore.querySelector('[role="treeitem"]');
+    if (primeiro) primeiro.tabIndex = 0;
+  }
+
+  function alternarExpansao(li, forcar) {
+    if (li.getAttribute("aria-expanded") === null) return;
+    const expandir = forcar === undefined ? li.getAttribute("aria-expanded") === "false" : forcar;
+    li.setAttribute("aria-expanded", expandir ? "true" : "false");
+    const alternar = li.querySelector(":scope > .no-linha > .no-alternar");
+    if (alternar) alternar.textContent = expandir ? "▾" : "▸";
+  }
+
+  function selecionarNo(id) {
+    const no = nosPorId[id];
+    if (!no) return;
+    noSelecionado = id;
+    for (const el of arvore.querySelectorAll('[aria-selected="true"]')) el.removeAttribute("aria-selected");
+    for (const el of arvore.querySelectorAll('[role="treeitem"]')) el.tabIndex = -1;
+    const li = arvore.querySelector('[data-id="' + id + '"]');
+    if (li) {
+      li.setAttribute("aria-selected", "true");
+      li.tabIndex = 0;
+      if (typeof li.focus === "function") li.focus();
+    }
+    destacarCodigoETokens(no);
+    mostrarDetalhes(no);
+  }
+
+  function destacarCodigoETokens(no) {
+    limparDestaqueAst();
+    if (no.tokenInicio === null || no.tokenInicio === undefined) return;
+    for (let i = no.tokenInicio; i <= no.tokenFim; i++) {
+      const span = destacado.querySelector('[data-indice="' + i + '"]');
+      if (span) span.classList.add("no-destaque");
+      const linha = corpoTokens.querySelector('tr[data-indice="' + i + '"]');
+      if (linha) linha.classList.add("no-destaque");
+    }
+  }
+
+  function mostrarDetalhes(no) {
+    const dl = doc.createElement("dl");
+    function par(chave, valor) {
+      dl.append(elemento("dt", chave), elemento("dd", valor));
+    }
+    par("Tipo", no.tipo);
+    par("Rótulo", no.rotulo);
+    par("Regra da gramática", no.regra);
+    par("Papel", no.papel ? (ROTULOS_PAPEL[no.papel] || no.papel) : "raiz da árvore");
+    par("Posição", "linha " + no.linha + ", coluna " + no.coluna + " até linha " + no.linhaFim + ", coluna " + no.colunaFim);
+    par("Tokens", no.tokenInicio === null ? "nenhum" : (no.tokenInicio + " a " + no.tokenFim));
+    const atributos = Object.keys(no.atributos || {});
+    if (atributos.length > 0) {
+      par("Atributos", atributos.map(function (k) { return k + ": " + no.atributos[k]; }).join(", "));
+    }
+    noDetalhes.replaceChildren(elemento("h3", "Nó selecionado"), dl);
+  }
+
+  // Navegacao por teclado na arvore.
+  function nosVisiveis() {
+    return Array.from(arvore.querySelectorAll('[role="treeitem"]')).filter(function (li) {
+      let pai = li.parentElement;
+      while (pai && pai !== arvore) {
+        if (pai.getAttribute("role") === "group") {
+          const ancestral = pai.parentElement;
+          if (ancestral && ancestral.getAttribute("aria-expanded") === "false") return false;
+        }
+        pai = pai.parentElement;
+      }
+      return true;
+    });
+  }
+
+  function navegarArvore(evento) {
+    const alvo = evento.target.closest ? evento.target.closest('[role="treeitem"]') : null;
+    if (!alvo || !arvore.contains(alvo)) return;
+    const visiveis = nosVisiveis();
+    const indice = visiveis.indexOf(alvo);
+    if (evento.key === "ArrowDown") {
+      evento.preventDefault();
+      if (indice < visiveis.length - 1) focarNo(visiveis[indice + 1]);
+    } else if (evento.key === "ArrowUp") {
+      evento.preventDefault();
+      if (indice > 0) focarNo(visiveis[indice - 1]);
+    } else if (evento.key === "ArrowRight") {
+      evento.preventDefault();
+      if (alvo.getAttribute("aria-expanded") === "false") alternarExpansao(alvo, true);
+    } else if (evento.key === "ArrowLeft") {
+      evento.preventDefault();
+      if (alvo.getAttribute("aria-expanded") === "true") alternarExpansao(alvo, false);
+    } else if (evento.key === "Enter" || evento.key === " ") {
+      evento.preventDefault();
+      selecionarNo(Number(alvo.dataset.id));
+    }
+  }
+
+  function focarNo(li) {
+    for (const el of arvore.querySelectorAll('[role="treeitem"]')) el.tabIndex = -1;
+    li.tabIndex = 0;
+    if (typeof li.focus === "function") li.focus();
+  }
+
+  function expandirTudo(expandir) {
+    for (const li of arvore.querySelectorAll('[role="treeitem"][aria-expanded]')) alternarExpansao(li, expandir);
+  }
+
+  function filtrar(valor) {
+    if (!valor) {
+      for (const li of arvore.querySelectorAll('[role="treeitem"]')) li.classList.remove("esmaecido");
+      return;
+    }
+    expandirTudo(true);
+    for (const li of arvore.querySelectorAll('[role="treeitem"]')) {
+      li.classList.toggle("esmaecido", li.dataset.tipo !== valor);
+    }
+  }
+
+  function baixarAst() {
+    if (!astRaiz) return;
+    const texto = exportarAst(astRaiz);
+    try {
+      const blob = new (doc.defaultView.Blob)([texto], { type: "application/json" });
+      const url = doc.defaultView.URL.createObjectURL(blob);
+      const link = doc.createElement("a");
+      link.href = url;
+      link.download = "ast-minic.json";
+      doc.body.appendChild(link);
+      link.click();
+      doc.body.removeChild(link);
+      doc.defaultView.URL.revokeObjectURL(url);
+    } catch (_erro) {
+      // Ambiente sem suporte a Blob/URL (ex.: alguns testes): a exportacao e opcional.
+    }
+  }
+
+  // Passo a passo da construcao.
+  function astPausar() {
+    if (astReproducao !== null) {
+      relogio.limpar(astReproducao);
+      astReproducao = null;
+    }
+    astReproduzirBtn.textContent = "Reproduzir";
+    astReproduzirBtn.setAttribute("aria-pressed", "false");
+  }
+
+  function atualizarControlesAst() {
+    astAnteriorBtn.setAttribute("aria-disabled", String(astPasso === null || astPasso <= 1));
+    astProximoBtn.setAttribute("aria-disabled", String(astPasso !== null && astPasso >= totalNos));
+    astReproduzirBtn.setAttribute("aria-disabled", String(totalNos === 0));
+  }
+
+  function irParaPasso(k) {
+    astPasso = k;
+    const criado = nosPorOrdem[k];
+    montarArvore(raizesDoPasso(astRaiz, k), k);
+    destacarCodigoETokens(criado);
+    const lexemas = lexemasDoNo(criado);
+    astPassoInfo.replaceChildren(elemento("p",
+      "Passo " + k + " de " + totalNos + ": o parser reconheceu " + criado.rotulo +
+      " pela regra " + criado.regra + ", a partir dos tokens " + lexemas + "."));
+    atualizarControlesAst();
+  }
+
+  function lexemasDoNo(no) {
+    if (no.tokenInicio === null || no.tokenInicio === undefined) return "(nenhum)";
+    const partes = [];
+    for (let i = no.tokenInicio; i <= no.tokenFim && i < analise.tokens.length; i++) {
+      partes.push(analise.tokens[i].lexema);
+    }
+    return partes.join(" ");
+  }
+
+  function astProximo() {
+    astPausar();
+    if (astPasso === null) irParaPasso(1);
+    else if (astPasso < totalNos) irParaPasso(astPasso + 1);
+  }
+
+  function astAnterior() {
+    astPausar();
+    if (astPasso !== null && astPasso > 1) irParaPasso(astPasso - 1);
+  }
+
+  function astArvoreCompleta() {
+    astPausar();
+    astPasso = null;
+    montarArvore([astRaiz], null);
+    limparDestaqueAst();
+    astPassoInfo.replaceChildren(elemento("p",
+      "Árvore completa: " + totalNos + " nó(s). Use Próximo ou as setas para ver a construção passo a passo."));
+    atualizarControlesAst();
+  }
+
+  function astPassoAutomatico() {
+    if (astPasso !== null && astPasso < totalNos) irParaPasso(astPasso + 1);
+    if (astPasso !== null && astPasso >= totalNos) astPausar();
+  }
+
+  function astAlternarReproducao() {
+    if (astReproducao !== null) { astPausar(); return; }
+    if (totalNos === 0) return;
+    if (astPasso === null || astPasso >= totalNos) irParaPasso(1);
+    astReproducao = relogio.definir(astPassoAutomatico, VELOCIDADES[astVelocidade.value] || VELOCIDADES.normal);
+    astReproduzirBtn.textContent = "Pausar";
+    astReproduzirBtn.setAttribute("aria-pressed", "true");
   }
 
   // Eventos
@@ -408,6 +867,23 @@ function iniciar(doc, fetchFn, temporizador) {
     }
   });
 
+  astAnteriorBtn.addEventListener("click", astAnterior);
+  astProximoBtn.addEventListener("click", astProximo);
+  astReproduzirBtn.addEventListener("click", astAlternarReproducao);
+  astCompletaBtn.addEventListener("click", astArvoreCompleta);
+  astExpandir.addEventListener("click", function () { expandirTudo(true); });
+  astRecolher.addEventListener("click", function () { expandirTudo(false); });
+  astExportar.addEventListener("click", baixarAst);
+  astFiltro.addEventListener("change", function () { filtrar(astFiltro.value); });
+  arvore.addEventListener("keydown", navegarArvore);
+
+  astVelocidade.addEventListener("change", function () {
+    if (astReproducao !== null) {
+      relogio.limpar(astReproducao);
+      astReproducao = relogio.definir(astPassoAutomatico, VELOCIDADES[astVelocidade.value] || VELOCIDADES.normal);
+    }
+  });
+
   secao.addEventListener("keydown", function (evento) {
     if (evento.target.tagName === "SELECT" || !analise) return;
     if (evento.key === "ArrowRight") {
@@ -420,7 +896,11 @@ function iniciar(doc, fetchFn, temporizador) {
   });
 
   campo.addEventListener("input", function () {
-    if (analise) mostrar("info", MENSAGENS.alterado);
+    if (analise) {
+      mostrar("info", MENSAGENS.alterado);
+      secao.classList.add("desatualizada");
+      if (!secaoSintatica.hidden) secaoSintatica.classList.add("desatualizada");
+    }
   });
 
   seletor.addEventListener("change", function () {
@@ -460,8 +940,9 @@ function iniciar(doc, fetchFn, temporizador) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    EXEMPLOS, MENSAGENS, CATEGORIAS, VELOCIDADES, validarCodigo, nomeCategoria, formatarTransicao,
-    contarPorCategoria, indicePorPosicao, montarSegmentos, enviarCodigo, iniciar
+    EXEMPLOS, MENSAGENS, CATEGORIAS, CATEGORIAS_NO, VELOCIDADES, validarCodigo, nomeCategoria,
+    formatarTransicao, contarPorCategoria, indicePorPosicao, montarSegmentos, categoriaNo,
+    raizesDoPasso, aplanarAst, tiposDaAst, exportarAst, enviarCodigo, iniciar
   };
 } else {
   document.addEventListener("DOMContentLoaded", function () {

@@ -6,7 +6,8 @@ const { JSDOM } = require("jsdom");
 
 const {
   EXEMPLOS, MENSAGENS, validarCodigo, iniciar, nomeCategoria, formatarTransicao,
-  contarPorCategoria, indicePorPosicao, montarSegmentos
+  contarPorCategoria, indicePorPosicao, montarSegmentos,
+  categoriaNo, raizesDoPasso, tiposDaAst, exportarAst
 } = require("../app.js");
 
 const HTML = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
@@ -45,6 +46,106 @@ function token(tipo, lexema, linha, coluna, transicoes) {
   return { tipo: tipo, lexema: lexema, linha: linha, coluna: coluna, transicoes: transicoes || [] };
 }
 
+// Construtor de no da AST no formato do backend (etapa 4). Os valores de cada mock
+// foram conferidos a mao contra as referencias das secoes 3.3 e 3.4 do enunciado.
+function no(props) {
+  return Object.assign({
+    id: 0, ordem: 0, tipo: "", rotulo: "", regra: "", papel: null,
+    linha: 1, coluna: 1, linhaFim: 1, colunaFim: 1,
+    tokenInicio: null, tokenFim: null, atributos: {}, filhos: []
+  }, props);
+}
+
+// AST de "int numero = 10;" (5 tokens, 3 nos).
+const AST_NUMERO = no({
+  id: 3, ordem: 3, tipo: "PROGRAMA", rotulo: "Programa", regra: "programa",
+  linha: 1, coluna: 1, linhaFim: 1, colunaFim: 16, tokenInicio: 0, tokenFim: 4,
+  filhos: [no({
+    id: 2, ordem: 2, tipo: "DECLARACAO_VARIAVEL", rotulo: "Declaração: int numero",
+    regra: "declarador", papel: "item", atributos: { tipoDado: "int", nome: "numero" },
+    linha: 1, coluna: 1, linhaFim: 1, colunaFim: 16, tokenInicio: 0, tokenFim: 4,
+    filhos: [no({
+      id: 1, ordem: 1, tipo: "LITERAL_INTEIRO", rotulo: "Literal inteiro: 10", regra: "primaria",
+      papel: "valor", atributos: { valor: "10" }, linha: 1, coluna: 14, linhaFim: 1, colunaFim: 15,
+      tokenInicio: 3, tokenFim: 3
+    })]
+  })]
+});
+
+// Tokens e AST de "int resultado = 10 + 5 * 2;" (9 tokens, 7 nos).
+const TOKENS_PRECEDENCIA = [
+  token("PALAVRA_RESERVADA", "int", 1, 1), token("IDENTIFICADOR", "resultado", 1, 5),
+  token("OPERADOR", "=", 1, 15), token("LITERAL_INTEIRO", "10", 1, 17),
+  token("OPERADOR", "+", 1, 20), token("LITERAL_INTEIRO", "5", 1, 22),
+  token("OPERADOR", "*", 1, 24), token("LITERAL_INTEIRO", "2", 1, 26),
+  token("DELIMITADOR", ";", 1, 27)
+];
+
+const AST_PRECEDENCIA = no({
+  id: 7, ordem: 7, tipo: "PROGRAMA", rotulo: "Programa", regra: "programa",
+  linha: 1, coluna: 1, linhaFim: 1, colunaFim: 27, tokenInicio: 0, tokenFim: 8,
+  filhos: [no({
+    id: 6, ordem: 6, tipo: "DECLARACAO_VARIAVEL", rotulo: "Declaração: int resultado",
+    regra: "declarador", papel: "item", atributos: { tipoDado: "int", nome: "resultado" },
+    linha: 1, coluna: 1, linhaFim: 1, colunaFim: 27, tokenInicio: 0, tokenFim: 8,
+    filhos: [no({
+      id: 5, ordem: 5, tipo: "ADICAO", rotulo: "Adição (+)", regra: "aditiva", papel: "valor",
+      atributos: { operador: "+" }, linha: 1, coluna: 17, linhaFim: 1, colunaFim: 26,
+      tokenInicio: 3, tokenFim: 7, filhos: [
+        no({
+          id: 1, ordem: 1, tipo: "LITERAL_INTEIRO", rotulo: "Literal inteiro: 10", regra: "primaria",
+          papel: "esquerda", atributos: { valor: "10" }, linha: 1, coluna: 17, linhaFim: 1, colunaFim: 18,
+          tokenInicio: 3, tokenFim: 3
+        }),
+        no({
+          id: 4, ordem: 4, tipo: "MULTIPLICACAO", rotulo: "Multiplicação (*)", regra: "multiplicativa",
+          papel: "direita", atributos: { operador: "*" }, linha: 1, coluna: 22, linhaFim: 1, colunaFim: 26,
+          tokenInicio: 5, tokenFim: 7, filhos: [
+            no({
+              id: 2, ordem: 2, tipo: "LITERAL_INTEIRO", rotulo: "Literal inteiro: 5", regra: "primaria",
+              papel: "esquerda", atributos: { valor: "5" }, linha: 1, coluna: 22, linhaFim: 1, colunaFim: 22,
+              tokenInicio: 5, tokenFim: 5
+            }),
+            no({
+              id: 3, ordem: 3, tipo: "LITERAL_INTEIRO", rotulo: "Literal inteiro: 2", regra: "primaria",
+              papel: "direita", atributos: { valor: "2" }, linha: 1, coluna: 26, linhaFim: 1, colunaFim: 26,
+              tokenInicio: 7, tokenFim: 7
+            })
+          ]
+        })
+      ]
+    })]
+  })]
+});
+
+function respostaPrecedencia() {
+  return respostaJson(200, {
+    recebido: true, sucesso: true,
+    mensagem: "Análise léxica e sintática concluídas sem erros: 9 token(s) e 7 nó(s) na AST.",
+    linhas: 1, caracteres: 27, tokens: TOKENS_PRECEDENCIA, erros: [],
+    lexico: { sucesso: true, tokens: TOKENS_PRECEDENCIA, erros: [] },
+    sintatico: { executado: true, sucesso: true, ast: AST_PRECEDENCIA, erros: [] }
+  });
+}
+
+const ERROS_SINTATICOS = [
+  {
+    tipo: "ERRO_SINTATICO", linha: 2, coluna: 11, encontrado: "{", esperado: [")"],
+    regra: 'condicional = "if" "(" expressao ")" bloco [ "else" ( bloco | condicional ) ]',
+    mensagem: "Erro sintático na linha 2, coluna 11: era esperado ')' para fechar a condição do if, mas foi encontrado '{'."
+  }
+];
+
+function respostaErroSintatico() {
+  return respostaJson(200, {
+    recebido: true, sucesso: true,
+    mensagem: "Análise léxica sem erros; análise sintática com 1 erro(s).",
+    linhas: 2, caracteres: 20, tokens: [token("PALAVRA_RESERVADA", "if", 1, 1)], erros: [],
+    lexico: { sucesso: true, tokens: [token("PALAVRA_RESERVADA", "if", 1, 1)], erros: [] },
+    sintatico: { executado: true, sucesso: false, ast: null, erros: ERROS_SINTATICOS }
+  });
+}
+
 // Resposta do contrato da etapa 3 para o código "int numero = 10;".
 const TOKENS_DECLARACAO = [
   token("PALAVRA_RESERVADA", "int", 1, 1),
@@ -61,29 +162,39 @@ const respostaSucesso = () =>
   respostaJson(200, {
     recebido: true,
     sucesso: true,
-    mensagem: "Análise léxica concluída sem erros: 5 token(s) reconhecido(s).",
+    mensagem: "Análise léxica e sintática concluídas sem erros: 5 token(s) e 3 nó(s) na AST.",
     linhas: 1,
     caracteres: 16,
     tokens: TOKENS_DECLARACAO,
-    erros: []
+    erros: [],
+    lexico: { sucesso: true, tokens: TOKENS_DECLARACAO, erros: [] },
+    sintatico: { executado: true, sucesso: true, ast: AST_NUMERO, erros: [] }
   });
 
 // Resposta do contrato da etapa 3 para o código "int a = 5 @ 2;".
 const MENSAGEM_ERRO_ARROBA = "Erro léxico na linha 1, coluna 11: caractere não reconhecido '@'. " +
   "Verifique se ele faz parte do subconjunto suportado.";
 
+const TOKENS_ERRO_LEXICO = [
+  token("PALAVRA_RESERVADA", "int", 1, 1), token("IDENTIFICADOR", "a", 1, 5), token("OPERADOR", "=", 1, 7),
+  token("LITERAL_INTEIRO", "5", 1, 9), token("LITERAL_INTEIRO", "2", 1, 13), token("DELIMITADOR", ";", 1, 14)
+];
+const ERROS_LEXICOS = [{ tipo: "ERRO_LEXICO", lexema: "@", linha: 1, coluna: 11, mensagem: MENSAGEM_ERRO_ARROBA }];
+const MOTIVO_SEM_SINTATICO =
+  "A análise sintática não foi executada porque há erros léxicos. Corrija-os e analise novamente.";
+
 const respostaComErro = () =>
   respostaJson(200, {
     recebido: true,
     sucesso: false,
-    mensagem: "Análise léxica concluída com 1 erro(s) léxico(s) e 6 token(s) reconhecido(s).",
+    mensagem: "Análise léxica concluída com 1 erro(s) léxico(s) e 6 token(s) reconhecido(s). " +
+      "A análise sintática não foi executada.",
     linhas: 1,
     caracteres: 14,
-    tokens: [
-      token("PALAVRA_RESERVADA", "int", 1, 1), token("IDENTIFICADOR", "a", 1, 5), token("OPERADOR", "=", 1, 7),
-      token("LITERAL_INTEIRO", "5", 1, 9), token("LITERAL_INTEIRO", "2", 1, 13), token("DELIMITADOR", ";", 1, 14)
-    ],
-    erros: [{ tipo: "ERRO_LEXICO", lexema: "@", linha: 1, coluna: 11, mensagem: MENSAGEM_ERRO_ARROBA }]
+    tokens: TOKENS_ERRO_LEXICO,
+    erros: ERROS_LEXICOS,
+    lexico: { sucesso: false, tokens: TOKENS_ERRO_LEXICO, erros: ERROS_LEXICOS },
+    sintatico: { executado: false, sucesso: false, ast: null, erros: [], motivo: MOTIVO_SEM_SINTATICO }
   });
 
 async function analisarDeclaracao(temporizador) {
@@ -195,7 +306,7 @@ test("código válido é enviado via POST em JSON para /api/analisar", async () 
   assert.strictEqual(tela.chamadas[0].url, "/api/analisar");
   assert.strictEqual(tela.chamadas[0].opcoes.method, "POST");
   assert.deepStrictEqual(JSON.parse(tela.chamadas[0].opcoes.body), { codigo: "int numero = 10;" });
-  assert.match(tela.resultado.textContent, /Análise léxica concluída sem erros/);
+  assert.match(tela.resultado.textContent, /Análise léxica e sintática concluídas sem erros/);
   assert.strictEqual(tela.resultado.className, "resultado sucesso");
 });
 
@@ -280,7 +391,7 @@ test("montarSegmentos separa texto simples, tokens e erros", () => {
 test("a seção da análise léxica fica oculta no início", () => {
   const tela = montarTela(respostaSucesso);
   assert.strictEqual(tela.secao.hidden, true);
-  assert.match(tela.doc.body.textContent, /Fase disponível: análise léxica \(scanner\)/);
+  assert.match(tela.doc.body.textContent, /Fases disponíveis: análise léxica \(scanner\) e análise sintática/);
   assert.ok(tela.doc.querySelector("details summary"));
 });
 
@@ -464,6 +575,264 @@ test("exemplo de erros léxicos contém os três tipos de erro previstos", () =>
   assert.match(EXEMPLOS.erro.codigo, /@/);
   assert.match(EXEMPLOS.erro.codigo, /\/\*/);
   assert.doesNotMatch(EXEMPLOS.erro.codigo, /\*\//);
+});
+
+// Testes da analise sintatica e da AST (etapa 4)
+
+async function analisarPrecedencia(temporizador) {
+  const tela = montarTela(respostaPrecedencia, temporizador);
+  tela.campo.value = "int resultado = 10 + 5 * 2;";
+  await clicarEAguardar(tela);
+  return tela;
+}
+
+function itensArvore(tela) {
+  return tela.doc.querySelectorAll('#arvore-ast [role="treeitem"]');
+}
+
+test("funções auxiliares da AST: categoria, raízes do passo e tipos", () => {
+  assert.strictEqual(categoriaNo("DECLARACAO_VARIAVEL").marca, "Declaração");
+  assert.strictEqual(categoriaNo("MULTIPLICACAO").marca, "Operação");
+  assert.strictEqual(categoriaNo("LITERAL_INTEIRO").marca, "Valor");
+  // No passo 1, só o primeiro literal (ordem 1) já foi criado.
+  const raizes = raizesDoPasso(AST_PRECEDENCIA, 1);
+  assert.strictEqual(raizes.length, 1);
+  assert.strictEqual(raizes[0].tipo, "LITERAL_INTEIRO");
+  assert.deepStrictEqual(tiposDaAst(AST_PRECEDENCIA),
+    ["PROGRAMA", "DECLARACAO_VARIAVEL", "ADICAO", "LITERAL_INTEIRO", "MULTIPLICACAO"]);
+});
+
+test("código válido exibe a árvore da AST", async () => {
+  const tela = await analisarPrecedencia();
+  const sintatica = tela.doc.getElementById("analise-sintatica");
+  assert.strictEqual(sintatica.hidden, false);
+  assert.strictEqual(tela.doc.getElementById("secao-arvore").hidden, false);
+  assert.strictEqual(itensArvore(tela).length, 7);
+  const raiz = itensArvore(tela)[0];
+  assert.strictEqual(raiz.getAttribute("role"), "treeitem");
+  assert.strictEqual(raiz.getAttribute("aria-level"), "1");
+});
+
+test("os nós mostram rótulo e marca de categoria em texto", async () => {
+  const tela = await analisarPrecedencia();
+  const itens = itensArvore(tela);
+  assert.strictEqual(itens[0].querySelector(".no-rotulo").textContent, "Programa");
+  assert.strictEqual(itens[0].querySelector(".no-marca").textContent, "Programa");
+  const literal = Array.from(itens).find((li) => li.dataset.tipo === "LITERAL_INTEIRO");
+  assert.strictEqual(literal.querySelector(".no-rotulo").textContent, "Literal inteiro: 10");
+  assert.strictEqual(literal.querySelector(".no-marca").textContent, "Valor");
+});
+
+test("selecionar um nó destaca o código, os tokens e mostra os detalhes", async () => {
+  const tela = await analisarPrecedencia();
+  const adicao = Array.from(itensArvore(tela)).find((li) => li.dataset.tipo === "ADICAO");
+  adicao.querySelector(".no-linha").dispatchEvent(tela.evento("click"));
+  assert.strictEqual(adicao.getAttribute("aria-selected"), "true");
+  // Tokens 3 a 7 ("10 + 5 * 2") ficam destacados no código e na tabela.
+  const spans = tela.doc.querySelectorAll("#codigo-destacado .no-destaque");
+  assert.deepStrictEqual(Array.from(spans).map((s) => s.dataset.indice), ["3", "4", "5", "6", "7"]);
+  const linhas = tela.doc.querySelectorAll("#corpo-tokens tr.no-destaque");
+  assert.strictEqual(linhas.length, 5);
+  const detalhes = tela.doc.getElementById("no-detalhes").textContent;
+  assert.match(detalhes, /Adição \(\+\)/);
+  assert.match(detalhes, /aditiva/);
+  assert.match(detalhes, /operador: \+/);
+});
+
+test("as posições da árvore e da tabela de tokens são consistentes", async () => {
+  const tela = await analisarPrecedencia();
+  const adicao = Array.from(itensArvore(tela)).find((li) => li.dataset.tipo === "ADICAO");
+  adicao.querySelector(".no-linha").dispatchEvent(tela.evento("click"));
+  const primeiraLinha = tela.doc.querySelector("#corpo-tokens tr.no-destaque");
+  // A primeira linha destacada é o token 4 (índice 3), o literal "10" na coluna 17,
+  // que coincide com a posição inicial do nó ADICAO (coluna 17).
+  const celulas = Array.from(primeiraLinha.querySelectorAll("td")).map((td) => td.textContent);
+  assert.strictEqual(celulas[0], "4");
+  assert.strictEqual(celulas[4], "17");
+});
+
+test("expandir e recolher tudo alteram aria-expanded dos nós", async () => {
+  const tela = await analisarPrecedencia();
+  tela.doc.getElementById("ast-recolher").dispatchEvent(tela.evento("click"));
+  const comFilhos = Array.from(itensArvore(tela)).filter((li) => li.getAttribute("aria-expanded") !== null);
+  assert.ok(comFilhos.every((li) => li.getAttribute("aria-expanded") === "false"));
+  tela.doc.getElementById("ast-expandir").dispatchEvent(tela.evento("click"));
+  assert.ok(comFilhos.every((li) => li.getAttribute("aria-expanded") === "true"));
+});
+
+test("as setas do teclado navegam entre os nós da árvore", async () => {
+  const tela = await analisarPrecedencia();
+  const itens = itensArvore(tela);
+  const programa = itens[0];
+  assert.strictEqual(programa.tabIndex, 0);
+  tela.tecla(programa, "ArrowDown");
+  const declaracao = Array.from(itens).find((li) => li.dataset.tipo === "DECLARACAO_VARIAVEL");
+  assert.strictEqual(declaracao.tabIndex, 0);
+  // Recolher com a seta para a esquerda.
+  tela.tecla(declaracao, "ArrowLeft");
+  assert.strictEqual(declaracao.getAttribute("aria-expanded"), "false");
+  tela.tecla(declaracao, "ArrowRight");
+  assert.strictEqual(declaracao.getAttribute("aria-expanded"), "true");
+  // Enter seleciona.
+  tela.tecla(declaracao, "Enter");
+  assert.strictEqual(declaracao.getAttribute("aria-selected"), "true");
+});
+
+test("o filtro esmaece os nós que não batem com o tipo escolhido", async () => {
+  const tela = await analisarPrecedencia();
+  const filtro = tela.doc.getElementById("ast-filtro");
+  filtro.value = "LITERAL_INTEIRO";
+  filtro.dispatchEvent(tela.evento("change"));
+  for (const li of itensArvore(tela)) {
+    const deveriaEsmaecer = li.dataset.tipo !== "LITERAL_INTEIRO";
+    assert.strictEqual(li.classList.contains("esmaecido"), deveriaEsmaecer);
+  }
+  filtro.value = "";
+  filtro.dispatchEvent(tela.evento("change"));
+  assert.ok(Array.from(itensArvore(tela)).every((li) => !li.classList.contains("esmaecido")));
+});
+
+test("a exportação gera um JSON igual à AST recebida", () => {
+  const texto = exportarAst(AST_PRECEDENCIA);
+  assert.deepStrictEqual(JSON.parse(texto), AST_PRECEDENCIA);
+});
+
+test("o filtro oferece uma opção por tipo de nó presente na árvore", async () => {
+  const tela = await analisarPrecedencia();
+  const opcoes = Array.from(tela.doc.querySelectorAll("#ast-filtro option")).map((o) => o.value);
+  assert.deepStrictEqual(opcoes,
+    ["", "PROGRAMA", "DECLARACAO_VARIAVEL", "ADICAO", "LITERAL_INTEIRO", "MULTIPLICACAO"]);
+});
+
+test("a construção passo a passo avança, volta e mostra o nó criado", async () => {
+  const tela = await analisarPrecedencia();
+  const proximo = tela.doc.getElementById("ast-proximo");
+  const anterior = tela.doc.getElementById("ast-anterior");
+  const info = tela.doc.getElementById("ast-passo-info");
+
+  proximo.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(itensArvore(tela).length, 1);
+  assert.match(info.textContent, /Passo 1 de 7/);
+  assert.match(info.textContent, /Literal inteiro: 10/);
+  assert.match(info.textContent, /primaria/);
+
+  for (let i = 0; i < 3; i++) proximo.dispatchEvent(tela.evento("click"));
+  assert.match(info.textContent, /Passo 4 de 7/);
+  assert.match(info.textContent, /Multiplicação \(\*\)/);
+  // No passo 4, a multiplicação (com seus dois literais) e o literal 10 já existem.
+  assert.ok(Array.from(itensArvore(tela)).some((li) => li.classList.contains("no-criado")));
+
+  anterior.dispatchEvent(tela.evento("click"));
+  assert.match(info.textContent, /Passo 3 de 7/);
+
+  tela.doc.getElementById("ast-arvore-completa").dispatchEvent(tela.evento("click"));
+  assert.strictEqual(itensArvore(tela).length, 7);
+});
+
+test("a reprodução da construção avança até o último nó com o temporizador falso", async () => {
+  const relogio = temporizadorFalso();
+  const tela = await analisarPrecedencia(relogio);
+  const reproduzir = tela.doc.getElementById("ast-reproduzir");
+  reproduzir.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(reproduzir.textContent, "Pausar");
+  assert.strictEqual(relogio.intervalo, 900);
+  let seguranca = 20;
+  while (relogio.funcao && seguranca-- > 0) relogio.funcao();
+  assert.match(tela.doc.getElementById("ast-passo-info").textContent, /Passo 7 de 7/);
+  assert.strictEqual(reproduzir.textContent, "Reproduzir");
+  assert.strictEqual(relogio.funcao, null);
+});
+
+test("erros sintáticos são listados com esperado, encontrado e regra", async () => {
+  const tela = montarTela(respostaErroSintatico);
+  tela.campo.value = "int a = 10;\nif (a > 0 {\n    a = 1;\n}\nb = ;";
+  await clicarEAguardar(tela);
+  assert.strictEqual(tela.doc.getElementById("secao-arvore").hidden, true);
+  assert.strictEqual(tela.doc.getElementById("secao-erros-sintaticos").hidden, false);
+  const itens = tela.doc.querySelectorAll("#lista-erros-sintaticos li");
+  assert.strictEqual(itens.length, 1);
+  const texto = itens[0].textContent;
+  assert.match(texto, /Erro sintático/);
+  assert.match(texto, /Esperado:/);
+  assert.match(texto, /Encontrado:/);
+  assert.match(texto, /Regra violada:/);
+  assert.match(texto, /condição do if/);
+  assert.strictEqual(tela.resultado.className, "resultado erro");
+});
+
+test("erro léxico mostra o motivo e não exibe a árvore", async () => {
+  const tela = montarTela(respostaComErro);
+  tela.campo.value = "int a = 5 @ 2;";
+  await clicarEAguardar(tela);
+  assert.strictEqual(tela.doc.getElementById("analise-sintatica").hidden, false);
+  assert.strictEqual(tela.doc.getElementById("secao-arvore").hidden, true);
+  assert.match(tela.doc.getElementById("sintatico-situacao").textContent, /erros léxicos/);
+  assert.strictEqual(tela.doc.querySelector('#arvore-ast [role="treeitem"]'), null);
+});
+
+test("a distinção entre erro léxico e sintático é visível por texto", async () => {
+  const lexica = montarTela(respostaComErro);
+  lexica.campo.value = "int a = 5 @ 2;";
+  await clicarEAguardar(lexica);
+  assert.match(lexica.doc.querySelector("#lista-erros li").textContent, /Erro léxico/);
+
+  const sintatica = montarTela(respostaErroSintatico);
+  sintatica.campo.value = "if (a > 0 {";
+  await clicarEAguardar(sintatica);
+  assert.match(sintatica.doc.querySelector("#lista-erros-sintaticos li").textContent, /Erro sintático/);
+});
+
+test("rótulos de nó com marcação HTML são exibidos como texto", async () => {
+  const astHtml = no({
+    id: 2, ordem: 2, tipo: "PROGRAMA", rotulo: "Programa", regra: "programa",
+    tokenInicio: 0, tokenFim: 0, filhos: [no({
+      id: 1, ordem: 1, tipo: "IDENTIFICADOR", rotulo: "Identificador: <b>x</b>", regra: "primaria",
+      papel: "item", atributos: { nome: "<b>x</b>" }, tokenInicio: 0, tokenFim: 0
+    })]
+  });
+  const tela = montarTela(() => respostaJson(200, {
+    recebido: true, sucesso: true,
+    mensagem: "Análise léxica e sintática concluídas sem erros: 1 token(s) e 2 nó(s) na AST.",
+    linhas: 1, caracteres: 8, tokens: [token("IDENTIFICADOR", "<b>x</b>", 1, 1)], erros: [],
+    lexico: { sucesso: true, tokens: [token("IDENTIFICADOR", "<b>x</b>", 1, 1)], erros: [] },
+    sintatico: { executado: true, sucesso: true, ast: astHtml, erros: [] }
+  }));
+  tela.campo.value = "<b>x</b>";
+  await clicarEAguardar(tela);
+  assert.strictEqual(tela.doc.querySelector("#arvore-ast b"), null);
+  const rotulo = Array.from(tela.doc.querySelectorAll("#arvore-ast .no-rotulo"))
+    .find((s) => s.textContent.includes("Identificador"));
+  assert.strictEqual(rotulo.textContent, "Identificador: <b>x</b>");
+});
+
+test("uma árvore grande é renderizada sem quebrar", async () => {
+  // Cadeia de adições à esquerda com muitos nós (perto de um programa grande).
+  let atual = no({ id: 1, ordem: 1, tipo: "LITERAL_INTEIRO", rotulo: "Literal inteiro: 1",
+    regra: "primaria", papel: "esquerda", atributos: { valor: "1" }, tokenInicio: 3, tokenFim: 3 });
+  let proximoId = 2;
+  const N = 150;
+  for (let i = 0; i < N; i++) {
+    const folha = no({ id: proximoId, ordem: proximoId, tipo: "LITERAL_INTEIRO",
+      rotulo: "Literal inteiro: 1", regra: "primaria", papel: "direita",
+      atributos: { valor: "1" }, tokenInicio: 3, tokenFim: 3 });
+    proximoId++;
+    atual = no({ id: proximoId, ordem: proximoId, tipo: "ADICAO", rotulo: "Adição (+)",
+      regra: "aditiva", papel: "esquerda", atributos: { operador: "+" }, tokenInicio: 3, tokenFim: 3,
+      filhos: [atual, folha] });
+    proximoId++;
+  }
+  const raiz = no({ id: proximoId, ordem: proximoId, tipo: "PROGRAMA", rotulo: "Programa",
+    regra: "programa", tokenInicio: 0, tokenFim: 0, filhos: [atual] });
+  const total = proximoId;
+  const tela = montarTela(() => respostaJson(200, {
+    recebido: true, sucesso: true, mensagem: "ok", linhas: 1, caracteres: 10,
+    tokens: [token("IDENTIFICADOR", "x", 1, 1)], erros: [],
+    lexico: { sucesso: true, tokens: [token("IDENTIFICADOR", "x", 1, 1)], erros: [] },
+    sintatico: { executado: true, sucesso: true, ast: raiz, erros: [] }
+  }));
+  tela.campo.value = "grande";
+  await clicarEAguardar(tela);
+  assert.strictEqual(itensArvore(tela).length, total);
 });
 
 // Teste de segurança
