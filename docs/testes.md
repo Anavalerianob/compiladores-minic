@@ -73,3 +73,43 @@ A primeira tentativa falhou por permissão de acesso ao Docker (`permission deni
 
 1. Os testes de interface utilizam o jsdom e simulam o servidor; a verificação em navegador real foi realizada por um script local, que controlou o navegador em modo headless, e não faz parte dos testes automatizados do repositório.
 2. O arquivo `frontend/package-lock.json`, gerado pelo `npm install`, não é versionado, como na etapa 2; por isso, a versão do jsdom instalada pode variar dentro da faixa `^25.0.1`.
+
+## Etapa 4 (11/11/2026)
+
+### Ambiente de execução
+
+Os testes desta etapa foram executados fora dos contêineres, em um ambiente virtual com Python 3.14.4, pytest 8.3.3 e Flask 3.0.3, e no frontend com Node.js 22.22.1 e jsdom 25.0.1. A execução no contêiner com Python 3.12, a construção das imagens do zero, o teste de implantação, o teste de IA com os contêineres e a integração real do Ollama ainda não foram executados nesta máquina; estão listados como pendências.
+
+### Resultados
+
+| Funcionalidade | Tipo de teste | Comando | Aprovados | Reprovados |
+|---|---|---|---|---|
+| Scanner (regressão da etapa 3) | Unitário | `pytest -v tests/test_scanner.py` | 77 | 0 |
+| Parser: construções válidas, estrutura da AST das referências, precedência, associatividade, posições, ordem de criação, ids, casos de erro, recuperação, limite de aninhamento e integração com o scanner | Unitário | `pytest -v tests/test_parser.py` | 47 | 0 |
+| API: validação, endpoints, contrato da etapa 3 preservado e contrato da etapa 4 com `lexico` e `sintatico` | Endpoint e regressão | `pytest -v tests/test_api.py` | 30 | 0 |
+| IA: extração do conteúdo, contexto correto, 400, 502, 503, 504, mensagens sem endereço e regressão da análise com IA indisponível | Unitário com mock | `pytest -v tests/test_ia.py` | 18 | 0 |
+| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande e explicações com IA | Interface | `cd frontend && npm install && npm test` | 71 | 0 |
+
+A execução completa do backend (`pytest -v`) resultou em 172 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 71 testes aprovados e 0 reprovados. Total automatizado desta execução: 243 testes aprovados, 0 reprovados e 1 pulado.
+
+O conjunto de interface passou de 42 para 71 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, e os demais são os novos testes da AST e da IA. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4.
+
+### Alterações intencionais de contrato
+
+1. A mensagem de `POST /api/analisar` mudou. Para um código válido sem erros, deixou de ser "Análise léxica concluída sem erros: N token(s) reconhecido(s)." e passou a ser "Análise léxica e sintática concluídas sem erros: N token(s) e M nó(s) na AST." (M é o número de nós da AST, conferido à mão). Com erro sintático, a mensagem é "Análise léxica sem erros; análise sintática com K erro(s).". Com erro léxico, a mensagem da etapa 3 passou a terminar com "A análise sintática não foi executada.". Os testes `test_analisar_codigo_valido`, `test_analisar_contrato_completo` e `test_analisar_erro_lexico_retorna_200_com_sucesso_falso` foram atualizados; o campo `sucesso` do topo continua se referindo à análise léxica.
+2. A resposta 200 passou a incluir os blocos `lexico` e `sintatico`. No frontend, as respostas simuladas `respostaSucesso` e `respostaComErro` foram atualizadas para o novo contrato, e a asserção da mensagem de sucesso foi ajustada.
+3. A indicação da fase na interface deixou de ser "Fase disponível: análise léxica (scanner)" e passou a "Fases disponíveis: análise léxica (scanner) e análise sintática (parser e AST)". O teste de estado inicial da interface foi atualizado.
+4. A lista de erros léxicos ganhou um botão de explicação com IA por erro. Os dois testes que comparavam o texto do item inteiro passaram a comparar o parágrafo da mensagem, e um deles passou a verificar a presença do botão.
+
+### Falhas encontradas e correções
+
+1. No parser, a mensagem de `;` ausente lia o nome do declarador em um formato de tupla antigo e gerava `KeyError`. Corrigi o acesso ao dicionário do nó antes de registrar os testes.
+2. O teste de reprodução do passo a passo da AST chamava o temporizador falso uma vez a mais e estourava quando a reprodução já tinha parado. Passei a chamar enquanto houver uma função agendada.
+3. Dois testes de interface da etapa 3 verificavam o texto exato do item de erro léxico; com o novo botão de IA, passaram a verificar o parágrafo da mensagem.
+
+### Limitações e pendências
+
+1. A execução no contêiner (Python 3.12), a construção das imagens do zero com `docker compose build --no-cache`, o `sh tests/implantacao.sh` (agora com 9 verificações, incluindo a AST e o erro sintático) e o `sh tests/ia.sh` não foram executados nesta máquina e precisam ser repetidos em ambiente com Docker antes da apresentação.
+2. A integração real do Ollama (`OLLAMA_INTEGRACAO=1`), o download do modelo `llama3.2` e a verificação de persistência do volume após `docker compose down` e `up` não foram executados; dependem de uma máquina com memória suficiente (cerca de 4 GB livres).
+3. A demonstração no navegador (digitar o código, ver a AST, selecionar a multiplicação, pedir a explicação com IA e, depois, pedir a explicação de um erro sintático) ainda não foi feita com os contêineres em execução.
+4. Os testes de interface continuam usando o jsdom e simulam o servidor, inclusive o endpoint da IA; não substituem testes de ponta a ponta em navegador real.
