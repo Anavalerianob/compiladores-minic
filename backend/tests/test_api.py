@@ -73,8 +73,9 @@ def test_analisar_codigo_valido(cliente):
     assert resposta.status_code == 200
     corpo = resposta.get_json()
     assert corpo["recebido"] is True
-    # Alteracao intencional da etapa 3 (antes: "Código recebido com sucesso."); ver docs/testes.md.
-    assert corpo["mensagem"] == "Análise léxica concluída sem erros: 8 token(s) reconhecido(s)."
+    # Alteracao intencional da etapa 4 (antes: "Análise léxica concluída sem erros:
+    # 8 token(s) reconhecido(s)."); ver docs/testes.md.
+    assert corpo["mensagem"] == "Análise léxica e sintática concluídas sem erros: 8 token(s) e 4 nó(s) na AST."
     assert corpo["linhas"] == 2
     assert corpo["caracteres"] == len("int numero = 10;\nfloat b;")
 
@@ -159,10 +160,14 @@ def test_analisar_contrato_completo(cliente):
     resposta = cliente.post("/api/analisar", json={"codigo": "int numero = 10;"})
     assert resposta.status_code == 200
     corpo = resposta.get_json()
-    assert set(corpo) == {"recebido", "sucesso", "mensagem", "linhas", "caracteres", "tokens", "erros"}
+    # A etapa 4 acrescenta "lexico" e "sintatico"; os campos do topo sao preservados.
+    assert set(corpo) == {
+        "recebido", "sucesso", "mensagem", "linhas", "caracteres", "tokens", "erros",
+        "lexico", "sintatico",
+    }
     assert corpo["recebido"] is True
     assert corpo["sucesso"] is True
-    assert corpo["mensagem"] == "Análise léxica concluída sem erros: 5 token(s) reconhecido(s)."
+    assert corpo["mensagem"] == "Análise léxica e sintática concluídas sem erros: 5 token(s) e 3 nó(s) na AST."
     assert corpo["linhas"] == 1
     assert corpo["caracteres"] == 16
     assert corpo["erros"] == []
@@ -180,7 +185,10 @@ def test_analisar_erro_lexico_retorna_200_com_sucesso_falso(cliente):
     assert resposta.status_code == 200
     corpo = resposta.get_json()
     assert corpo["sucesso"] is False
-    assert corpo["mensagem"] == "Análise léxica concluída com 1 erro(s) léxico(s) e 6 token(s) reconhecido(s)."
+    assert corpo["mensagem"] == (
+        "Análise léxica concluída com 1 erro(s) léxico(s) e 6 token(s) reconhecido(s). "
+        "A análise sintática não foi executada."
+    )
     assert len(corpo["erros"]) == 1
     erro = corpo["erros"][0]
     assert set(erro) == {"tipo", "lexema", "linha", "coluna", "mensagem"}
@@ -207,6 +215,79 @@ def test_erro_no_scanner_nao_expoe_detalhes(cliente, monkeypatch):
         raise RuntimeError("segredo interno /app/scanner.py")
 
     monkeypatch.setattr(modulo_app, "analisar_lexico", falhar)
+    resposta = cliente.post("/api/analisar", json={"codigo": "int a;"})
+    assert resposta.status_code == 500
+    texto = resposta.get_data(as_text=True)
+    assert "segredo" not in texto
+    assert "Traceback" not in texto
+    assert resposta.get_json() == {"erro": "Ocorreu um erro inesperado no servidor."}
+
+
+# Testes da integracao com o parser (etapa 4)
+
+def test_analisar_contrato_etapa4_codigo_valido(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int resultado = 10 + 5 * 2;"})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    # Campos da etapa 3 preservados e referentes a analise lexica.
+    assert corpo["sucesso"] is True
+    assert corpo["erros"] == []
+    assert len(corpo["tokens"]) == 9
+    # Bloco lexico.
+    assert corpo["lexico"]["sucesso"] is True
+    assert corpo["lexico"]["tokens"] == corpo["tokens"]
+    assert corpo["lexico"]["erros"] == []
+    # Bloco sintatico.
+    sint = corpo["sintatico"]
+    assert sint["executado"] is True
+    assert sint["sucesso"] is True
+    assert sint["erros"] == []
+    assert sint["ast"]["tipo"] == "PROGRAMA"
+    # A AST descreve a precedencia: a raiz da expressao e uma ADICAO com MULTIPLICACAO.
+    decl = sint["ast"]["filhos"][0]
+    assert decl["tipo"] == "DECLARACAO_VARIAVEL"
+    assert decl["filhos"][0]["tipo"] == "ADICAO"
+    assert corpo["mensagem"] == (
+        "Análise léxica e sintática concluídas sem erros: 9 token(s) e 7 nó(s) na AST."
+    )
+
+
+def test_analisar_erro_sintatico_ast_nula_http_200(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int x = 5"})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    # Lexicamente valido.
+    assert corpo["sucesso"] is True
+    assert corpo["lexico"]["sucesso"] is True
+    sint = corpo["sintatico"]
+    assert sint["executado"] is True
+    assert sint["sucesso"] is False
+    assert sint["ast"] is None
+    assert len(sint["erros"]) >= 1
+    assert sint["erros"][0]["tipo"] == "ERRO_SINTATICO"
+    assert corpo["mensagem"] == "Análise léxica sem erros; análise sintática com 1 erro(s)."
+
+
+def test_analisar_erro_lexico_nao_executa_sintatico(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int a = 5 @ 2;"})
+    assert resposta.status_code == 200
+    corpo = resposta.get_json()
+    assert corpo["sucesso"] is False
+    assert corpo["lexico"]["sucesso"] is False
+    sint = corpo["sintatico"]
+    assert sint["executado"] is False
+    assert sint["sucesso"] is False
+    assert sint["ast"] is None
+    assert sint["erros"] == []
+    assert "erros léxicos" in sint["motivo"]
+    assert corpo["mensagem"].endswith("A análise sintática não foi executada.")
+
+
+def test_excecao_no_parser_vira_500_sem_detalhes(cliente, monkeypatch):
+    def falhar(_tokens):
+        raise RuntimeError("segredo interno /app/parser.py")
+
+    monkeypatch.setattr(modulo_app, "analisar_sintaxe", falhar)
     resposta = cliente.post("/api/analisar", json={"codigo": "int a;"})
     assert resposta.status_code == 500
     texto = resposta.get_data(as_text=True)
