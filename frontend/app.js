@@ -257,6 +257,20 @@ async function enviarCodigo(codigo, fetchFn) {
   return { tipo: "erro", texto: MENSAGENS.inesperado };
 }
 
+// O modelo costuma responder em Markdown (**negrito**, `código`, listas com * ou -,
+// títulos com #). Como a resposta é exibida com textContent por segurança, esses
+// marcadores apareceriam crus; esta função os remove sem interpretar HTML. Não mexe
+// em "*" isolado (por exemplo, no operador de "5 * 2"), só nos marcadores de formatação.
+function limparMarkdown(texto) {
+  return String(texto)
+    .replace(/`+/g, "")                 // crases (código)
+    .replace(/\*\*/g, "")               // negrito com **
+    .replace(/__/g, "")                 // negrito com __
+    .replace(/^#{1,6}\s+/gm, "")        // títulos (# ... ######)
+    .replace(/^\s*[*-]\s+/gm, "• ")     // marcadores de lista no início da linha
+    .replace(/[ \t]+$/gm, "");          // espaços no fim de cada linha
+}
+
 async function enviarPergunta(corpo, fetchFn) {
   let resposta;
   try {
@@ -970,7 +984,8 @@ function iniciar(doc, fetchFn, temporizador) {
   function mostrarIaResposta(retorno) {
     if (retorno.tipo === "sucesso") {
       iaResposta.className = "";
-      const paragrafos = retorno.explicacao.split(/\n\s*\n|\n/).filter(function (t) { return t.trim() !== ""; });
+      const limpo = limparMarkdown(retorno.explicacao);
+      const paragrafos = limpo.split(/\n\s*\n|\n/).filter(function (t) { return t.trim() !== ""; });
       const frag = doc.createDocumentFragment();
       for (const texto of paragrafos) frag.appendChild(elemento("p", texto));
       iaResposta.replaceChildren(frag);
@@ -1147,7 +1162,8 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     EXEMPLOS, MENSAGENS, CATEGORIAS, CATEGORIAS_NO, SUGESTOES_IA, VELOCIDADES, validarCodigo,
     nomeCategoria, formatarTransicao, contarPorCategoria, indicePorPosicao, montarSegmentos,
-    categoriaNo, raizesDoPasso, aplanarAst, tiposDaAst, exportarAst, enviarCodigo, enviarPergunta, iniciar
+    categoriaNo, raizesDoPasso, aplanarAst, tiposDaAst, exportarAst, limparMarkdown,
+    enviarCodigo, enviarPergunta, iniciar
   };
 } else {
   document.addEventListener("DOMContentLoaded", function () {

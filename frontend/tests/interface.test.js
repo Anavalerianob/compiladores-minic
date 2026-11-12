@@ -7,7 +7,7 @@ const { JSDOM } = require("jsdom");
 const {
   EXEMPLOS, MENSAGENS, validarCodigo, iniciar, nomeCategoria, formatarTransicao,
   contarPorCategoria, indicePorPosicao, montarSegmentos,
-  categoriaNo, raizesDoPasso, tiposDaAst, exportarAst, enviarPergunta
+  categoriaNo, raizesDoPasso, tiposDaAst, exportarAst, limparMarkdown, enviarPergunta
 } = require("../app.js");
 
 const HTML = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
@@ -970,6 +970,26 @@ test("o botão perguntar envia o texto digitado como pergunta", async () => {
   const corpo = JSON.parse(chamadaIa(tela).opcoes.body);
   assert.strictEqual(corpo.tipo, "PERGUNTA");
   assert.strictEqual(corpo.pergunta, "O que é um token?");
+});
+
+test("limparMarkdown remove marcadores mas preserva o operador", () => {
+  assert.strictEqual(limparMarkdown("A **adição** e o `token`."), "A adição e o token.");
+  assert.strictEqual(limparMarkdown("# Título\n* item\n- outro"), "Título\n• item\n• outro");
+  // O "*" do operador de multiplicação não é removido.
+  assert.strictEqual(limparMarkdown("resultado = 5 * 2;"), "resultado = 5 * 2;");
+});
+
+test("a resposta da IA remove ** e crases ao exibir, mantendo o texto", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "O nó **MULTIPLICACAO** usa `operador=*`.", modelo: "llama3.2", geradoPorIA: true }));
+  selecionarAdicao(tela);
+  tela.doc.querySelector("#no-detalhes button.botao-ia").click();
+  await tick(); await tick();
+  const texto = tela.doc.getElementById("ia-resposta").textContent;
+  assert.doesNotMatch(texto, /\*\*/);
+  assert.doesNotMatch(texto, /`/);
+  assert.match(texto, /MULTIPLICACAO/);
+  assert.match(texto, /operador=\*/);
 });
 
 test("o botão de IA aparece nos erros sintáticos e léxicos", async () => {
