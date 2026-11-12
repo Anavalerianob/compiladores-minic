@@ -82,7 +82,7 @@ Os testes unitários desta etapa foram executados primeiro fora dos contêineres
 
 ### Validação em instalação limpa
 
-Foram executados, em sequência, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy`, o frontend com a porta `8080:80` publicada e o contêiner `ollama` em execução com a porta 11434 apenas interna (não publicada no host). Em seguida, `sh tests/implantacao.sh` apresentou as 9 verificações aprovadas, incluindo as duas novas (a análise de `int resultado = 10 + 5 * 2;` contém `MULTIPLICACAO` e a de `int x = 5` contém `ERRO_SINTATICO`), e `docker compose run --rm backend pytest -q` apresentou 172 testes aprovados e 1 pulado, com Python 3.12.
+Foram executados, em sequência, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy`, o frontend com a porta `8080:80` publicada e o contêiner `ollama` em execução com a porta 11434 apenas interna (não publicada no host). Em seguida, `sh tests/implantacao.sh` apresentou as 9 verificações aprovadas, incluindo as duas novas (a análise de `int resultado = 10 + 5 * 2;` contém `MULTIPLICACAO` e a de `int x = 5` contém `ERRO_SINTATICO`), e `docker compose run --rm backend pytest -q` apresentou 176 testes aprovados e 1 pulado, com Python 3.12.
 
 Antes de baixar o modelo, uma requisição a `POST /api/ia/explicar` respondeu HTTP 503 (assistente indisponível), e `POST /api/analisar` continuou respondendo normalmente, o que confirma que a análise não depende do Ollama.
 
@@ -109,6 +109,36 @@ O backend reexecutou o scanner e o parser, montou o contexto do nó de id 4 (a M
 
 A explicação não é perfeita (o modelo mistura um pouco os conceitos), o que confirma a limitação registrada: a IA é apoio, e o resultado oficial é o do compilador.
 
+### Problema e correção: a IA inventava tipos de nó
+
+Ao explicar a MULTIPLICACAO de `int resultado = 10 + 5 * 2;`, o Llama 3.2 inventava tipos de nó que não existem na AST (por exemplo, EXPRESSAO e OP_RELACIONAL, que são nomes de regras da gramática, não de nós) e descrevia a árvore errado. O aviso de que a explicação pode conter erros já estava na interface, mas o aterramento do contexto podia ser melhor.
+
+Correções em `backend/ia.py`:
+
+1. O contexto do nó passou a trazer a subárvore do pai em texto indentado, com os tipos exatos e o nó selecionado marcado, mais uma linha "Tipos de nó permitidos (use somente estes nomes...)" com os tipos que realmente aparecem. Para o nó 4, o contexto fica assim:
+
+   ```
+   Tipos de nó permitidos (use somente estes nomes, exatamente assim): ADICAO, LITERAL_INTEIRO, MULTIPLICACAO.
+   ...
+   ADICAO (+)
+     LITERAL_INTEIRO 10
+     MULTIPLICACAO (*)  <= selecionado
+       LITERAL_INTEIRO 5
+       LITERAL_INTEIRO 2
+   ```
+
+2. Acrescentei ao system prompt a regra "Use somente os tipos de nó listados nos dados, com exatamente esses nomes.".
+3. Baixei a temperatura para 0 e reduzi o limite da resposta de 250 para 150 palavras.
+4. O backend passou a remover os marcadores de Markdown (`**` e crases) da resposta, além da limpeza que a interface já fazia.
+
+Verifiquei que o botão "Explicar com IA" do nó selecionado envia o id correto: para a MULTIPLICACAO de `int resultado = 10 + 5 * 2;`, envia `alvo` 4 (teste `o botão de IA do nó de multiplicação envia o id correto como alvo`).
+
+Depois da correção, a mesma requisição (nó 4) com o Ollama real respondeu, em cerca de 25 segundos, usando só os tipos reais:
+
+"Este nó da AST é um nó de MULTIPLICACAO... O nó de MULTIPLICACAO é o filho direito do nó de ADICAO, que representa a operação de adição... O nó de MULTIPLICACAO tem dois filhos: um LITERAL_INTEIRO com o valor 5 e outro LITERAL_INTEIRO com o valor 2."
+
+A resposta não contém mais EXPRESSAO nem OP_RELACIONAL, descreve a árvore corretamente e vem sem `**` ou crases. A integração real (`OLLAMA_INTEGRACAO=1`) passou nos 23 testes.
+
 ### Resultados
 
 | Funcionalidade | Tipo de teste | Comando | Aprovados | Reprovados |
@@ -116,12 +146,12 @@ A explicação não é perfeita (o modelo mistura um pouco os conceitos), o que 
 | Scanner (regressão da etapa 3) | Unitário | `pytest -v tests/test_scanner.py` | 77 | 0 |
 | Parser: construções válidas, estrutura da AST das referências, precedência, associatividade, posições, ordem de criação, ids, casos de erro, recuperação, limite de aninhamento e integração com o scanner | Unitário | `pytest -v tests/test_parser.py` | 47 | 0 |
 | API: validação, endpoints, contrato da etapa 3 preservado e contrato da etapa 4 com `lexico` e `sintatico` | Endpoint e regressão | `pytest -v tests/test_api.py` | 30 | 0 |
-| IA: extração do conteúdo, contexto correto, 400, 502, 503, 504, mensagens sem endereço e regressão da análise com IA indisponível | Unitário com mock | `pytest -v tests/test_ia.py` | 18 | 0 |
-| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA e abas do layout | Interface | `cd frontend && npm install && npm test` | 79 | 0 |
+| IA: extração do conteúdo, aterramento do contexto (tipos exatos, nó marcado), system prompt, temperatura, limpeza de Markdown, 400, 502, 503, 504, mensagens sem endereço e regressão com IA indisponível | Unitário com mock | `pytest -v tests/test_ia.py` | 22 | 0 |
+| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA, abas do layout e limpeza de Markdown | Interface | `cd frontend && npm install && npm test` | 82 | 0 |
 
-A execução completa do backend (`pytest -v`) resultou em 172 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 79 testes aprovados e 0 reprovados. Total automatizado desta execução: 251 testes aprovados, 0 reprovados e 1 pulado.
+A execução completa do backend (`pytest -v`) resultou em 176 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 82 testes aprovados e 0 reprovados. Total automatizado desta execução: 258 testes aprovados, 0 reprovados e 1 pulado.
 
-O conjunto de interface passou de 42 para 79 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, mais os testes da AST, da IA e, por fim, 8 testes das abas do novo layout. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4.
+O conjunto de interface passou de 42 para 82 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, mais os testes da AST, da IA, das abas do novo layout e da limpeza de Markdown. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4. O conjunto da IA passou de 18 para 22, com os testes do aterramento do contexto.
 
 ### Reorganização da interface
 

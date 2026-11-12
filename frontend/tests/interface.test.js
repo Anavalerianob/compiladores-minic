@@ -892,6 +892,19 @@ test("o botão de IA do nó envia o tipo e o alvo certos e exibe a resposta", as
   assert.match(tela.doc.getElementById("ia-resposta").textContent, /prioridade/);
 });
 
+test("o botão de IA do nó de multiplicação envia o id correto como alvo", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "ok.", modelo: "llama3.2", geradoPorIA: true }));
+  const mult = Array.from(itensArvore(tela)).find((li) => li.dataset.tipo === "MULTIPLICACAO");
+  assert.ok(mult);
+  mult.querySelector(".no-linha").dispatchEvent(tela.evento("click"));
+  tela.doc.querySelector("#no-detalhes button.botao-ia").click();
+  await tick(); await tick();
+  const corpo = JSON.parse(chamadaIa(tela).opcoes.body);
+  assert.strictEqual(corpo.tipo, "NO_AST");
+  assert.strictEqual(corpo.alvo, 4);   // id da MULTIPLICACAO em "int resultado = 10 + 5 * 2;"
+});
+
 test("durante a espera o botão fica desabilitado e aparece o carregamento", async () => {
   let resolver;
   const tela = await prepararAstIa(() => new Promise((r) => {

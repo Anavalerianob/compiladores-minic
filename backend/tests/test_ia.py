@@ -93,6 +93,54 @@ def test_contexto_no_tem_no_pai_filhos_e_regra(monkeypatch):
     assert "programa" in conteudo           # a gramática acompanha o contexto
 
 
+def test_contexto_no_lista_tipos_exatos_e_marca_selecionado(monkeypatch):
+    registro = {}
+    monkeypatch.setattr(ia, "_post_json", fake_ok(registro))
+    # Em "int resultado = 10 + 5 * 2;" o nó de id 4 é a MULTIPLICACAO.
+    ia.gerar_explicacao("NO_AST", CODIGO_REF, 4, None)
+    conteudo = registro["dados"]["messages"][1]["content"]
+    linha_tipos = next(l for l in conteudo.splitlines() if l.startswith("Tipos de nó permitidos"))
+    # A lista traz só os tipos reais da subárvore do pai, com os nomes exatos.
+    assert "ADICAO" in linha_tipos
+    assert "MULTIPLICACAO" in linha_tipos
+    assert "LITERAL_INTEIRO" in linha_tipos
+    # E não os nomes que o modelo costumava inventar (regras da gramática, não nós).
+    assert "EXPRESSAO" not in linha_tipos
+    assert "OP_RELACIONAL" not in linha_tipos
+    # A subárvore indentada marca o nó selecionado e mostra os dois literais.
+    assert "MULTIPLICACAO (*)  <= selecionado" in conteudo
+    assert "LITERAL_INTEIRO 5" in conteudo
+    assert "LITERAL_INTEIRO 2" in conteudo
+    assert "LITERAL_INTEIRO 10" in conteudo
+
+
+def test_system_prompt_exige_tipos_listados_e_150_palavras(monkeypatch):
+    registro = {}
+    monkeypatch.setattr(ia, "_post_json", fake_ok(registro))
+    ia.gerar_explicacao("PERGUNTA", "int x;", None, "Oi?")
+    system = registro["dados"]["messages"][0]["content"]
+    assert "somente os tipos de nó listados" in system
+    assert "150 palavras" in system
+
+
+def test_requisicao_usa_temperatura_zero(monkeypatch):
+    registro = {}
+    monkeypatch.setattr(ia, "_post_json", fake_ok(registro))
+    ia.gerar_explicacao("PERGUNTA", "int x;", None, "Oi?")
+    assert registro["dados"]["options"]["temperature"] == 0
+
+
+def test_resposta_remove_markdown(monkeypatch):
+    monkeypatch.setattr(ia, "_post_json",
+                        fake_chat(lambda: {"message": {"content": "O **MULTIPLICACAO** usa `operador=*`."}}))
+    status, corpo = ia.gerar_explicacao("PERGUNTA", "int x;", None, "Oi?")
+    assert status == 200
+    assert "**" not in corpo["explicacao"]
+    assert "`" not in corpo["explicacao"]
+    assert "MULTIPLICACAO" in corpo["explicacao"]
+    assert "operador=*" in corpo["explicacao"]   # o "*" do operador é preservado
+
+
 def test_contexto_erro_sintatico_tem_regra_e_diagnostico(monkeypatch):
     registro = {}
     monkeypatch.setattr(ia, "_post_json", fake_ok(registro))
