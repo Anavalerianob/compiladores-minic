@@ -984,6 +984,81 @@ test("o botão de IA aparece nos erros sintáticos e léxicos", async () => {
   assert.ok(lex.doc.querySelector("#lista-erros button.botao-ia"));
 });
 
+// Testes das abas (reorganização do layout, etapa 4)
+
+test("antes da análise, o placeholder aparece e as abas ficam ocultas", () => {
+  const tela = montarTela(respostaSucesso);
+  assert.strictEqual(tela.doc.getElementById("resultados-placeholder").hidden, false);
+  assert.strictEqual(tela.doc.getElementById("abas").hidden, true);
+  assert.strictEqual(tela.doc.getElementById("aba-tokens").getAttribute("role"), "tab");
+  assert.strictEqual(tela.doc.getElementById("abas").getAttribute("role"), "tablist");
+});
+
+test("após analisar sem erros, abre a aba Árvore (AST)", async () => {
+  const tela = await analisarPrecedencia();
+  assert.strictEqual(tela.doc.getElementById("abas").hidden, false);
+  assert.strictEqual(tela.doc.getElementById("aba-arvore").getAttribute("aria-selected"), "true");
+  assert.strictEqual(tela.doc.getElementById("painel-arvore").hidden, false);
+  assert.strictEqual(tela.doc.getElementById("painel-tokens").hidden, true);
+});
+
+test("após analisar com erro léxico, abre a aba Erros com contador", async () => {
+  const tela = montarTela(respostaComErro);
+  tela.campo.value = "int a = 5 @ 2;";
+  await clicarEAguardar(tela);
+  const abaErros = tela.doc.getElementById("aba-erros");
+  assert.strictEqual(abaErros.getAttribute("aria-selected"), "true");
+  assert.match(abaErros.textContent, /Erros \(1\)/);
+  assert.strictEqual(tela.doc.getElementById("painel-erros").hidden, false);
+});
+
+test("após analisar com erro sintático, abre a aba Erros", async () => {
+  const tela = montarTela(respostaErroSintatico);
+  tela.campo.value = "if (a > 0 {";
+  await clicarEAguardar(tela);
+  const abaErros = tela.doc.getElementById("aba-erros");
+  assert.strictEqual(abaErros.getAttribute("aria-selected"), "true");
+  assert.match(abaErros.textContent, /Erros \(1\)/);
+});
+
+test("as abas trocam por clique", async () => {
+  const tela = await analisarPrecedencia();
+  const abaTokens = tela.doc.getElementById("aba-tokens");
+  abaTokens.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(abaTokens.getAttribute("aria-selected"), "true");
+  assert.strictEqual(tela.doc.getElementById("painel-tokens").hidden, false);
+  assert.strictEqual(tela.doc.getElementById("painel-arvore").hidden, true);
+});
+
+test("as setas do teclado trocam de aba", async () => {
+  const tela = await analisarPrecedencia();
+  const abaTokens = tela.doc.getElementById("aba-tokens");
+  abaTokens.dispatchEvent(tela.evento("click"));
+  tela.tecla(abaTokens, "ArrowRight");
+  assert.strictEqual(tela.doc.getElementById("aba-arvore").getAttribute("aria-selected"), "true");
+  tela.tecla(tela.doc.getElementById("aba-arvore"), "ArrowLeft");
+  assert.strictEqual(abaTokens.getAttribute("aria-selected"), "true");
+});
+
+test("pedir explicação com IA abre a aba Professor IA", async () => {
+  const tela = await prepararAstIa(() =>
+    respostaJson(200, { explicacao: "Explicação.", modelo: "llama3.2", geradoPorIA: true }));
+  selecionarAdicao(tela);
+  tela.doc.querySelector("#no-detalhes button.botao-ia").click();
+  await tick(); await tick();
+  assert.strictEqual(tela.doc.getElementById("aba-ia").getAttribute("aria-selected"), "true");
+  assert.strictEqual(tela.doc.getElementById("painel-ia").hidden, false);
+});
+
+test("limpar a entrada após a análise esconde as abas e mostra o placeholder", async () => {
+  const tela = await analisarDeclaracao();
+  assert.strictEqual(tela.doc.getElementById("abas").hidden, false);
+  tela.campo.value = "";
+  await clicarEAguardar(tela);
+  assert.strictEqual(tela.doc.getElementById("abas").hidden, true);
+  assert.strictEqual(tela.doc.getElementById("resultados-placeholder").hidden, false);
+});
+
 // Teste de segurança
 
 test("lexemas e mensagens com marcação HTML são exibidos como texto", async () => {

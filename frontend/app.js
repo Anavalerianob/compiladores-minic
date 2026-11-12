@@ -329,6 +329,16 @@ function iniciar(doc, fetchFn, temporizador) {
   const iaEnviar = doc.getElementById("ia-enviar");
   const iaSugestoes = doc.getElementById("ia-sugestoes");
 
+  // Abas dos resultados (reorganização do layout; não altera o comportamento).
+  const abas = doc.getElementById("abas");
+  const placeholderResultados = doc.getElementById("resultados-placeholder");
+  const ABAS = [
+    { tab: "aba-tokens", painel: "painel-tokens", nome: "tokens" },
+    { tab: "aba-arvore", painel: "painel-arvore", nome: "arvore" },
+    { tab: "aba-erros", painel: "painel-erros", nome: "erros" },
+    { tab: "aba-ia", painel: "painel-ia", nome: "ia" }
+  ];
+
   let analise = null;
   let iaOcupado = false;
   let atual = -1;
@@ -545,6 +555,13 @@ function iniciar(doc, fetchFn, temporizador) {
       atualizarInfo();
     }
     exibirSintatico(dados.sintatico);
+
+    // Reorganiza em abas: após analisar, abre "Erros" se houver erro, senão "Árvore (AST)".
+    const nLexico = analise.erros.length;
+    const nSintatico = (dados.sintatico && Array.isArray(dados.sintatico.erros)) ? dados.sintatico.erros.length : 0;
+    atualizarContadorErros(nLexico + nSintatico);
+    revelarResultados();
+    ativarAba(nLexico + nSintatico > 0 ? "erros" : "arvore");
   }
 
   function ocultarAnalise() {
@@ -555,6 +572,8 @@ function iniciar(doc, fetchFn, temporizador) {
     astRaiz = null;
     secao.hidden = true;
     secaoSintatica.hidden = true;
+    atualizarContadorErros(0);
+    esconderResultados();
   }
 
   // ----- Analise sintatica e AST -----
@@ -923,6 +942,7 @@ function iniciar(doc, fetchFn, temporizador) {
 
   async function pedirExplicacao(opcoes) {
     if (iaOcupado) return;
+    ativarAba("ia");   // a resposta aparece na aba "Professor IA"
     const codigo = (analise && analise.codigo) || campo.value;
     if (!codigo || codigo.trim() === "") {
       mostrarIaResposta({ tipo: "erro", texto: MENSAGENS.iaSemCodigo });
@@ -974,6 +994,60 @@ function iniciar(doc, fetchFn, temporizador) {
     iaSugestoes.replaceChildren(frag);
   }
 
+  // ----- Abas dos resultados -----
+
+  function ativarAba(nome) {
+    for (const a of ABAS) {
+      const ativa = a.nome === nome;
+      const tab = doc.getElementById(a.tab);
+      const painel = doc.getElementById(a.painel);
+      if (!tab || !painel) continue;
+      tab.setAttribute("aria-selected", ativa ? "true" : "false");
+      tab.tabIndex = ativa ? 0 : -1;
+      painel.hidden = !ativa;
+    }
+  }
+
+  function atualizarContadorErros(total) {
+    const tab = doc.getElementById("aba-erros");
+    tab.textContent = total > 0 ? "Erros (" + total + ")" : "Erros";
+  }
+
+  function revelarResultados() {
+    placeholderResultados.hidden = true;
+    abas.hidden = false;
+  }
+
+  function esconderResultados() {
+    placeholderResultados.hidden = false;
+    abas.hidden = true;
+    for (const a of ABAS) {
+      const tab = doc.getElementById(a.tab);
+      const painel = doc.getElementById(a.painel);
+      if (painel) painel.hidden = true;
+      if (tab) {
+        const padrao = a.nome === "tokens";
+        tab.setAttribute("aria-selected", padrao ? "true" : "false");
+        tab.tabIndex = padrao ? 0 : -1;
+      }
+    }
+  }
+
+  function navegarAbas(evento) {
+    const indice = ABAS.findIndex(function (a) { return doc.getElementById(a.tab) === evento.target; });
+    if (indice < 0) return;
+    let destino = indice;
+    if (evento.key === "ArrowRight") destino = (indice + 1) % ABAS.length;
+    else if (evento.key === "ArrowLeft") destino = (indice - 1 + ABAS.length) % ABAS.length;
+    else if (evento.key === "Home") destino = 0;
+    else if (evento.key === "End") destino = ABAS.length - 1;
+    else return;
+    evento.preventDefault();
+    ativarAba(ABAS[destino].nome);
+    const tab = doc.getElementById(ABAS[destino].tab);
+    if (tab && typeof tab.focus === "function") tab.focus();
+  }
+
   // Eventos
 
   anterior.addEventListener("click", voltar);
@@ -1008,6 +1082,12 @@ function iniciar(doc, fetchFn, temporizador) {
     pedirExplicacao({ tipo: "PERGUNTA", pergunta: iaPergunta.value, botao: iaEnviar });
   });
   montarSugestoesIa();
+
+  for (const a of ABAS) {
+    const tab = doc.getElementById(a.tab);
+    if (tab) tab.addEventListener("click", function () { ativarAba(a.nome); });
+  }
+  abas.addEventListener("keydown", navegarAbas);
 
   secao.addEventListener("keydown", function (evento) {
     if (evento.target.tagName === "SELECT" || !analise) return;

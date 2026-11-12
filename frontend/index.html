@@ -12,16 +12,40 @@
       margin: 0;
       padding: 24px 16px;
     }
-    main {
-      max-width: 800px;
+    .cabecalho { max-width: 1120px; margin: 0 auto 16px; }
+    main.layout {
+      max-width: 1120px;
       margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(300px, 400px) 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    .coluna-entrada, .coluna-resultados {
       background: #fff;
-      padding: 24px;
+      padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      min-width: 0;
     }
+    .coluna-entrada { position: sticky; top: 16px; }
     h1 { margin: 0 0 4px; }
-    .subtitulo { margin: 0 0 24px; color: #555; }
+    .subtitulo { margin: 0 0 4px; color: #555; }
+    .titulo-painel { margin-top: 0; }
+    /* Abas dos resultados */
+    .abas {
+      display: flex; gap: 4px; border-bottom: 2px solid #dde3ea;
+      overflow-x: auto; margin-bottom: 12px;
+    }
+    .aba {
+      margin-top: 0; background: #eef1f5; color: #30363d;
+      border: 1px solid #dde3ea; border-bottom: none;
+      border-radius: 6px 6px 0 0; padding: 8px 14px; white-space: nowrap;
+    }
+    .aba[aria-selected="true"] { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+    .aba:hover { background: #dfe6ef; }
+    .aba[aria-selected="true"]:hover { background: #1b60cf; }
+    #resultados-placeholder { color: #555; padding: 24px 8px; }
     label { display: block; margin: 16px 0 6px; font-weight: 600; }
     select, textarea, button { font-size: 1rem; }
     select { padding: 6px; width: 100%; }
@@ -54,7 +78,7 @@
     .resultado.sucesso { background: #e6f4ea; color: #1e6b34; }
     .resultado.erro { background: #fdecea; color: #a12622; }
     .resultado.info { background: #e8f0fe; color: #1a4c9c; }
-    .fase { margin: -16px 0 16px; font-weight: 600; color: #1a4c9c; }
+    .fase { margin: 0; font-weight: 600; color: #1a4c9c; }
     details { margin: 0 0 8px; padding: 8px 12px; background: #f7f9fc; border: 1px solid #dde3ea; border-radius: 4px; }
     summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
     details ol { padding-left: 20px; }
@@ -173,9 +197,15 @@
     }
     .botao-ia { margin-top: 8px; }
     button:disabled, .ia-sugestoes button:disabled { background: #9aa4b2; cursor: wait; }
+    @media (max-width: 900px) {
+      main.layout { grid-template-columns: 1fr; }
+      .coluna-entrada { position: static; }
+      .coluna-entrada textarea { min-height: 160px; }
+    }
     @media (max-width: 600px) {
       body { padding: 12px 8px; }
-      main { padding: 16px; }
+      .coluna-entrada, .coluna-resultados { padding: 16px; }
+      .aba { padding: 8px 12px; }
       .controles { flex-direction: column; align-items: stretch; }
       .controles button, .controles select { width: 100%; }
       .controles label { margin: 8px 0 0; }
@@ -188,94 +218,99 @@
   </style>
 </head>
 <body>
-  <main>
+  <header class="cabecalho">
     <h1>MiniC Analisador</h1>
     <p class="subtitulo">Software educacional de compiladores. Linguagem analisada: subconjunto da linguagem C (MiniC).</p>
     <p class="fase">Fases disponíveis: análise léxica (scanner) e análise sintática (parser e AST)</p>
+  </header>
 
-    <details>
-      <summary>Como usar e o que é análise léxica</summary>
-      <p>A análise léxica é a primeira fase de um compilador. O scanner lê o código caractere a caractere e o agrupa em tokens, que são as menores unidades com significado da linguagem. O trecho de texto que forma um token é chamado de lexema: em <code>int numero = 10;</code>, o lexema <code>numero</code> forma um token da categoria identificador, e o lexema <code>10</code> forma um literal inteiro. Espaços e comentários são descartados, e caracteres que não pertencem ao subconjunto são informados como erros léxicos, com linha e coluna.</p>
-      <ol>
-        <li>Escreva um programa ou selecione um dos exemplos.</li>
-        <li>Clique em Analisar.</li>
-        <li>Consulte a contagem, o código destacado por categoria, a tabela de tokens e a lista de erros.</li>
-        <li>Use o passo a passo (botões ou setas esquerda e direita) para ver as transições do autômato que reconheceram cada token.</li>
-      </ol>
-    </details>
+  <main class="layout">
+    <section class="coluna-entrada" aria-label="Entrada de código">
+      <label for="exemplos">Exemplos de programas</label>
+      <select id="exemplos">
+        <option value="">Selecione um exemplo...</option>
+        <option value="declaracao">Exemplo 1: Declaração e inicialização de variáveis</option>
+        <option value="aritmetica">Exemplo 2: Operações aritméticas</option>
+        <option value="condicional">Exemplo 3: Estrutura condicional</option>
+        <option value="comentarios">Exemplo 4: Comentários e operadores relacionais</option>
+        <option value="erro">Exemplo 5: Código com erros léxicos</option>
+        <option value="precedencia">Exemplo 6: Precedência e associatividade (AST)</option>
+        <option value="aninhado">Exemplo 7: if, else if e else com blocos aninhados</option>
+        <option value="erro_sintatico">Exemplo 8: Código com erros sintáticos</option>
+      </select>
 
-    <label for="exemplos">Exemplos de programas</label>
-    <select id="exemplos">
-      <option value="">Selecione um exemplo...</option>
-      <option value="declaracao">Exemplo 1: Declaração e inicialização de variáveis</option>
-      <option value="aritmetica">Exemplo 2: Operações aritméticas</option>
-      <option value="condicional">Exemplo 3: Estrutura condicional</option>
-      <option value="comentarios">Exemplo 4: Comentários e operadores relacionais</option>
-      <option value="erro">Exemplo 5: Código com erros léxicos</option>
-      <option value="precedencia">Exemplo 6: Precedência e associatividade (AST)</option>
-      <option value="aninhado">Exemplo 7: if, else if e else com blocos aninhados</option>
-      <option value="erro_sintatico">Exemplo 8: Código com erros sintáticos</option>
-    </select>
+      <label for="codigo">Código-fonte</label>
+      <textarea id="codigo" spellcheck="false" placeholder="Escreva ou cole aqui um programa em MiniC..."></textarea>
 
-    <label for="codigo">Código-fonte</label>
-    <textarea id="codigo" spellcheck="false" placeholder="Escreva ou cole aqui um programa em MiniC..."></textarea>
+      <button id="analisar" type="button">Analisar</button>
 
-    <button id="analisar" type="button">Analisar</button>
-
-    <label for="resultado">Resultado</label>
-    <div id="resultado" class="resultado" role="status" aria-live="polite">Nenhuma análise realizada.</div>
-
-    <section id="analise-lexica" aria-labelledby="titulo-analise" hidden>
-      <h2 id="titulo-analise">Análise léxica</h2>
-
-      <h3>Resumo</h3>
-      <div id="contagem"></div>
-
-      <h3>Código destacado por categoria</h3>
-      <pre id="codigo-destacado" class="codigo-destacado" tabindex="0" aria-label="Código com os tokens destacados por categoria"></pre>
-
-      <h3>Passo a passo do autômato</h3>
-      <p>Use os botões ou as setas esquerda e direita do teclado para percorrer os tokens.</p>
-      <div class="controles">
-        <button id="passo-anterior" type="button">Anterior</button>
-        <button id="passo-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
-        <button id="passo-proximo" type="button">Próximo</button>
-        <label for="passo-velocidade">Velocidade</label>
-        <select id="passo-velocidade">
-          <option value="lenta">Lenta</option>
-          <option value="normal" selected>Normal</option>
-          <option value="rapida">Rápida</option>
-        </select>
-      </div>
-      <div id="passo-info" class="passo-info" aria-live="polite"></div>
-
-      <h3>Tabela de tokens</h3>
-      <div class="tabela-container">
-        <table>
-          <caption>Clique em uma linha (ou pressione Enter sobre ela) para vê-la no passo a passo.</caption>
-          <thead>
-            <tr><th scope="col">#</th><th scope="col">Categoria</th><th scope="col">Lexema</th><th scope="col">Linha</th><th scope="col">Coluna</th></tr>
-          </thead>
-          <tbody id="corpo-tokens"></tbody>
-        </table>
-      </div>
-
-      <h3>Erros léxicos</h3>
-      <ul id="lista-erros"></ul>
+      <label for="resultado">Resultado</label>
+      <div id="resultado" class="resultado" role="status" aria-live="polite">Nenhuma análise realizada.</div>
     </section>
 
-    <section id="analise-sintatica" aria-labelledby="titulo-sintatica" hidden>
-      <h2 id="titulo-sintatica">Análise sintática e AST</h2>
+    <section class="coluna-resultados" aria-label="Resultados da análise">
+      <p id="resultados-placeholder">Analise um código para ver os tokens, a árvore (AST) e os erros. Escreva ou selecione um exemplo na coluna ao lado e clique em Analisar.</p>
 
-      <details>
-        <summary>O que é análise sintática e AST</summary>
-        <p>A análise sintática é a segunda fase do compilador. O parser recebe a sequência de tokens do scanner e verifica se ela segue a gramática da linguagem, que define como os tokens podem ser combinados. Quando a sequência é válida, o parser constrói a árvore sintática abstrata (AST), uma representação em árvore da estrutura do programa.</p>
-        <p>Há três estruturas que não se confundem. A sequência de tokens é o que o scanner reconheceu, em ordem. A árvore de derivação mostraria cada regra da gramática aplicada e todos os terminais, inclusive <code>;</code> e os parênteses. A AST guarda só o que importa para o significado: em <code>int x = (1 + 2) * 3;</code>, os parênteses não viram nó (eles apenas mudam a forma da árvore) e o <code>;</code> também não aparece; fica uma multiplicação cujo filho esquerdo é uma adição. Este projeto exibe a AST; não exibe a árvore de derivação.</p>
-      </details>
+      <div id="abas" class="abas" role="tablist" aria-label="Resultados da análise" hidden>
+        <button id="aba-tokens" class="aba" type="button" role="tab" aria-selected="true" aria-controls="painel-tokens" tabindex="0">Tokens</button>
+        <button id="aba-arvore" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-arvore" tabindex="-1">Árvore (AST)</button>
+        <button id="aba-erros" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-erros" tabindex="-1">Erros</button>
+        <button id="aba-ia" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-ia" tabindex="-1">Professor IA</button>
+      </div>
 
-      <details>
-        <summary>Gramática do MiniC (EBNF)</summary>
-        <pre class="codigo-destacado">programa        = { item } FIM ;
+      <div id="painel-tokens" class="painel" role="tabpanel" aria-labelledby="aba-tokens" tabindex="0" hidden>
+        <details>
+          <summary>O que é análise léxica</summary>
+          <p>A análise léxica é a primeira fase de um compilador. O scanner lê o código caractere a caractere e o agrupa em tokens, que são as menores unidades com significado da linguagem. O trecho de texto que forma um token é chamado de lexema: em <code>int numero = 10;</code>, o lexema <code>numero</code> forma um token da categoria identificador, e o lexema <code>10</code> forma um literal inteiro. Espaços e comentários são descartados, e caracteres que não pertencem ao subconjunto são informados como erros léxicos, com linha e coluna.</p>
+        </details>
+
+        <section id="analise-lexica" aria-labelledby="titulo-analise" hidden>
+          <h2 id="titulo-analise" class="titulo-painel">Análise léxica</h2>
+
+          <h3>Resumo</h3>
+          <div id="contagem"></div>
+
+          <h3>Código destacado por categoria</h3>
+          <pre id="codigo-destacado" class="codigo-destacado" tabindex="0" aria-label="Código com os tokens destacados por categoria"></pre>
+
+          <h3>Passo a passo do autômato</h3>
+          <p>Use os botões ou as setas esquerda e direita do teclado para percorrer os tokens.</p>
+          <div class="controles">
+            <button id="passo-anterior" type="button">Anterior</button>
+            <button id="passo-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
+            <button id="passo-proximo" type="button">Próximo</button>
+            <label for="passo-velocidade">Velocidade</label>
+            <select id="passo-velocidade">
+              <option value="lenta">Lenta</option>
+              <option value="normal" selected>Normal</option>
+              <option value="rapida">Rápida</option>
+            </select>
+          </div>
+          <div id="passo-info" class="passo-info" aria-live="polite"></div>
+
+          <h3>Tabela de tokens</h3>
+          <div class="tabela-container">
+            <table>
+              <caption>Clique em uma linha (ou pressione Enter sobre ela) para vê-la no passo a passo.</caption>
+              <thead>
+                <tr><th scope="col">#</th><th scope="col">Categoria</th><th scope="col">Lexema</th><th scope="col">Linha</th><th scope="col">Coluna</th></tr>
+              </thead>
+              <tbody id="corpo-tokens"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="painel-arvore" class="painel" role="tabpanel" aria-labelledby="aba-arvore" tabindex="0" hidden>
+        <details>
+          <summary>O que é análise sintática e AST</summary>
+          <p>A análise sintática é a segunda fase do compilador. O parser recebe a sequência de tokens do scanner e verifica se ela segue a gramática da linguagem, que define como os tokens podem ser combinados. Quando a sequência é válida, o parser constrói a árvore sintática abstrata (AST), uma representação em árvore da estrutura do programa.</p>
+          <p>Há três estruturas que não se confundem. A sequência de tokens é o que o scanner reconheceu, em ordem. A árvore de derivação mostraria cada regra da gramática aplicada e todos os terminais, inclusive <code>;</code> e os parênteses. A AST guarda só o que importa para o significado: em <code>int x = (1 + 2) * 3;</code>, os parênteses não viram nó (eles apenas mudam a forma da árvore) e o <code>;</code> também não aparece; fica uma multiplicação cujo filho esquerdo é uma adição. Este projeto exibe a AST; não exibe a árvore de derivação.</p>
+        </details>
+
+        <details>
+          <summary>Gramática do MiniC (EBNF)</summary>
+          <pre class="codigo-destacado">programa        = { item } FIM ;
 item            = declaracao | comando ;
 declaracao      = tipo declarador { "," declarador } ";" ;
 declarador      = IDENTIFICADOR [ "=" expressao ] ;
@@ -290,64 +325,76 @@ aditiva         = multiplicativa { ( "+" | "-" ) multiplicativa } ;
 multiplicativa  = unaria { ( "*" | "/" ) unaria } ;
 unaria          = "-" unaria | primaria ;
 primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao ")" ;</pre>
-      </details>
+        </details>
 
-      <div id="sintatico-situacao" role="status" aria-live="polite"></div>
+        <section id="analise-sintatica" aria-labelledby="titulo-sintatica" hidden>
+          <h2 id="titulo-sintatica" class="titulo-painel">Árvore sintática abstrata (AST)</h2>
 
-      <section id="secao-erros-sintaticos" hidden>
-        <h3>Erros sintáticos</h3>
-        <ul id="lista-erros-sintaticos"></ul>
-      </section>
+          <div id="sintatico-situacao" role="status" aria-live="polite"></div>
 
-      <section id="secao-arvore" hidden>
-        <h3>Árvore sintática abstrata (AST)</h3>
-        <div class="ast-ferramentas">
-          <button id="ast-expandir" type="button">Expandir tudo</button>
-          <button id="ast-recolher" type="button">Recolher tudo</button>
-          <label for="ast-filtro">Filtrar por tipo</label>
-          <select id="ast-filtro"><option value="">Todos os nós</option></select>
-          <button id="ast-exportar" type="button">Exportar AST (JSON)</button>
-        </div>
+          <section id="secao-arvore" hidden>
+            <div class="ast-ferramentas">
+              <button id="ast-expandir" type="button">Expandir tudo</button>
+              <button id="ast-recolher" type="button">Recolher tudo</button>
+              <label for="ast-filtro">Filtrar por tipo</label>
+              <select id="ast-filtro"><option value="">Todos os nós</option></select>
+              <button id="ast-exportar" type="button">Exportar AST (JSON)</button>
+            </div>
 
-        <h3>Construção passo a passo</h3>
-        <p>Veja a ordem em que o parser criou os nós (os filhos antes do pai). Use os botões ou as setas para cima e para baixo do teclado para navegar na árvore.</p>
-        <div class="controles">
-          <button id="ast-anterior" type="button">Anterior</button>
-          <button id="ast-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
-          <button id="ast-proximo" type="button">Próximo</button>
-          <label for="ast-velocidade">Velocidade</label>
-          <select id="ast-velocidade">
-            <option value="lenta">Lenta</option>
-            <option value="normal" selected>Normal</option>
-            <option value="rapida">Rápida</option>
-          </select>
-          <button id="ast-arvore-completa" type="button">Árvore completa</button>
-        </div>
-        <div id="ast-passo-info" class="passo-info" aria-live="polite"></div>
+            <h3>Construção passo a passo</h3>
+            <p>Veja a ordem em que o parser criou os nós (os filhos antes do pai). Use os botões ou as setas para cima e para baixo do teclado para navegar na árvore.</p>
+            <div class="controles">
+              <button id="ast-anterior" type="button">Anterior</button>
+              <button id="ast-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
+              <button id="ast-proximo" type="button">Próximo</button>
+              <label for="ast-velocidade">Velocidade</label>
+              <select id="ast-velocidade">
+                <option value="lenta">Lenta</option>
+                <option value="normal" selected>Normal</option>
+                <option value="rapida">Rápida</option>
+              </select>
+              <button id="ast-arvore-completa" type="button">Árvore completa</button>
+            </div>
+            <div id="ast-passo-info" class="passo-info" aria-live="polite"></div>
 
-        <div class="arvore-container">
-          <ul id="arvore-ast" class="arvore" role="tree" aria-label="Árvore sintática abstrata do programa"></ul>
-        </div>
+            <div class="arvore-container">
+              <ul id="arvore-ast" class="arvore" role="tree" aria-label="Árvore sintática abstrata do programa"></ul>
+            </div>
 
-        <div id="no-detalhes" aria-live="polite"></div>
-      </section>
+            <div id="no-detalhes" aria-live="polite"></div>
+          </section>
+        </section>
+      </div>
 
-      <section id="ia-area">
-        <h3>Explicações com IA (opcional)</h3>
-        <p>Um assistente de IA local (Llama 3.2, pelo Ollama) pode explicar os resultados. A análise não depende dele: se estiver desligado, tokens, AST e erros continuam funcionando.</p>
-        <p class="ia-aviso">Explicação gerada por IA (Llama 3.2). Pode conter erros; o resultado oficial é o do compilador.</p>
-        <div id="ia-resposta" role="status" aria-live="polite"></div>
+      <div id="painel-erros" class="painel" role="tabpanel" aria-labelledby="aba-erros" tabindex="0" hidden>
+        <h2 class="titulo-painel">Erros</h2>
+        <h3>Erros léxicos</h3>
+        <ul id="lista-erros"></ul>
 
-        <h3>Professor virtual</h3>
-        <p>Pergunte sobre conceitos da análise sintática ou clique em uma sugestão:</p>
-        <div id="ia-sugestoes" class="ia-sugestoes"></div>
-        <label for="ia-pergunta">Sua pergunta</label>
-        <textarea id="ia-pergunta" rows="2" maxlength="500" placeholder="Ex.: qual a diferença entre o scanner e o parser?"></textarea>
-        <button id="ia-enviar" type="button">Perguntar ao professor virtual</button>
-      </section>
+        <section id="secao-erros-sintaticos" hidden>
+          <h3>Erros sintáticos</h3>
+          <ul id="lista-erros-sintaticos"></ul>
+        </section>
+      </div>
+
+      <div id="painel-ia" class="painel" role="tabpanel" aria-labelledby="aba-ia" tabindex="0" hidden>
+        <section id="ia-area">
+          <h2 class="titulo-painel">Explicações com IA (opcional)</h2>
+          <p>Um assistente de IA local (Llama 3.2, pelo Ollama) pode explicar os resultados. A análise não depende dele: se estiver desligado, tokens, AST e erros continuam funcionando.</p>
+          <p class="ia-aviso">Explicação gerada por IA (Llama 3.2). Pode conter erros; o resultado oficial é o do compilador.</p>
+          <div id="ia-resposta" role="status" aria-live="polite"></div>
+
+          <h3>Professor virtual</h3>
+          <p>Pergunte sobre conceitos da análise sintática ou clique em uma sugestão:</p>
+          <div id="ia-sugestoes" class="ia-sugestoes"></div>
+          <label for="ia-pergunta">Sua pergunta</label>
+          <textarea id="ia-pergunta" rows="2" maxlength="500" placeholder="Ex.: qual a diferença entre o scanner e o parser?"></textarea>
+          <button id="ia-enviar" type="button">Perguntar ao professor virtual</button>
+        </section>
+      </div>
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

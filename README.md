@@ -273,6 +273,8 @@ Outros códigos retornados: 404 para rota inexistente, 405 para método não per
 
 ## Interface
 
+A tela é organizada em duas colunas no computador (acima de 900 pixels): à esquerda, fixa ao rolar, ficam o seletor de exemplos, o editor de código e o botão Analisar; à direita, os resultados. Os resultados são divididos em abas, para não empilhar tudo em uma coluna longa: Tokens (resumo, código destacado, passo a passo do scanner e tabela), Árvore (AST) (a árvore, os detalhes do nó, a construção passo a passo, o filtro e a exportação), Erros (léxicos e sintáticos separados, com um contador no nome da aba) e Professor IA. As abas usam `role="tablist"` e `role="tab"`, trocam por clique e pelas setas do teclado, e os textos explicativos ficam recolhidos em `details` dentro de cada aba. Depois de analisar, abre automaticamente a aba Erros quando há erro e a aba Árvore (AST) quando não há; ao pedir uma explicação com IA, a aba Professor IA é aberta. No celular (até 600 pixels) fica uma coluna só, com o editor em cima e as abas abaixo, que rolam na horizontal quando não cabem.
+
 A tela principal contém:
 
 1. Identificação do sistema e da linguagem analisada, com a indicação "Fases disponíveis: análise léxica (scanner) e análise sintática (parser e AST)";

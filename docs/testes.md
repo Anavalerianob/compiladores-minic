@@ -94,11 +94,15 @@ Sem o modelo `llama3.2` baixado, uma requisição a `POST /api/ia/explicar` resp
 | Parser: construções válidas, estrutura da AST das referências, precedência, associatividade, posições, ordem de criação, ids, casos de erro, recuperação, limite de aninhamento e integração com o scanner | Unitário | `pytest -v tests/test_parser.py` | 47 | 0 |
 | API: validação, endpoints, contrato da etapa 3 preservado e contrato da etapa 4 com `lexico` e `sintatico` | Endpoint e regressão | `pytest -v tests/test_api.py` | 30 | 0 |
 | IA: extração do conteúdo, contexto correto, 400, 502, 503, 504, mensagens sem endereço e regressão da análise com IA indisponível | Unitário com mock | `pytest -v tests/test_ia.py` | 18 | 0 |
-| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande e explicações com IA | Interface | `cd frontend && npm install && npm test` | 71 | 0 |
+| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA e abas do layout | Interface | `cd frontend && npm install && npm test` | 79 | 0 |
 
-A execução completa do backend (`pytest -v`) resultou em 172 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 71 testes aprovados e 0 reprovados. Total automatizado desta execução: 243 testes aprovados, 0 reprovados e 1 pulado.
+A execução completa do backend (`pytest -v`) resultou em 172 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 79 testes aprovados e 0 reprovados. Total automatizado desta execução: 251 testes aprovados, 0 reprovados e 1 pulado.
 
-O conjunto de interface passou de 42 para 71 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, e os demais são os novos testes da AST e da IA. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4.
+O conjunto de interface passou de 42 para 79 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, mais os testes da AST, da IA e, por fim, 8 testes das abas do novo layout. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4.
+
+### Reorganização da interface
+
+A interface foi reorganizada em duas colunas (entrada fixa à esquerda, resultados à direita) e os resultados foram divididos em abas: Tokens, Árvore (AST), Erros (com contador no nome) e Professor IA. As abas usam `role="tablist"`, `role="tab"`, `aria-selected`, troca por clique e pelas setas do teclado; depois de analisar, abre automaticamente a aba Erros quando há erro e a aba Árvore quando não há. Foi só mudança de layout: todos os IDs e comportamentos anteriores foram mantidos, por isso os 71 testes existentes continuaram passando sem alteração, e foram acrescentados 8 testes das abas (troca por clique, troca por teclado, aba automática após a análise, contador de erros e estado inicial com placeholder). Nenhuma biblioteca externa foi adicionada.
 
 ### Alterações intencionais de contrato
 
