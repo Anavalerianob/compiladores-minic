@@ -78,7 +78,13 @@ A primeira tentativa falhou por permissão de acesso ao Docker (`permission deni
 
 ### Ambiente de execução
 
-Os testes desta etapa foram executados fora dos contêineres, em um ambiente virtual com Python 3.14.4, pytest 8.3.3 e Flask 3.0.3, e no frontend com Node.js 22.22.1 e jsdom 25.0.1. A execução no contêiner com Python 3.12, a construção das imagens do zero, o teste de implantação, o teste de IA com os contêineres e a integração real do Ollama ainda não foram executados nesta máquina; estão listados como pendências.
+Os testes unitários desta etapa foram executados primeiro fora dos contêineres, em um ambiente virtual com Python 3.14.4, pytest 8.3.3 e Flask 3.0.3, e no frontend com Node.js 22.22.1 e jsdom 25.0.1. Depois, o backend foi executado no contêiner, com Python 3.12, após a construção das imagens do zero. A integração real do Ollama e a demonstração no navegador ainda não foram executadas; estão listadas como pendências.
+
+### Validação em instalação limpa
+
+Foram executados, em sequência, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy`, o frontend com a porta `8080:80` publicada e o contêiner `ollama` em execução com a porta 11434 apenas interna (não publicada no host). Em seguida, `sh tests/implantacao.sh` apresentou as 9 verificações aprovadas, incluindo as duas novas (a análise de `int resultado = 10 + 5 * 2;` contém `MULTIPLICACAO` e a de `int x = 5` contém `ERRO_SINTATICO`), e `docker compose run --rm backend pytest -q` apresentou 172 testes aprovados e 1 pulado, com Python 3.12.
+
+Sem o modelo `llama3.2` baixado, uma requisição a `POST /api/ia/explicar` respondeu HTTP 503 (assistente indisponível), e `POST /api/analisar` continuou respondendo normalmente. Isso confirma que a análise não depende do Ollama. O download do modelo, o `sh tests/ia.sh` e a integração real não foram executados por escolha, para não baixar os cerca de 4 GB do modelo nesta máquina.
 
 ### Resultados
 
@@ -109,7 +115,6 @@ O conjunto de interface passou de 42 para 71 testes: 3 a mais porque o teste de 
 
 ### Limitações e pendências
 
-1. A execução no contêiner (Python 3.12), a construção das imagens do zero com `docker compose build --no-cache`, o `sh tests/implantacao.sh` (agora com 9 verificações, incluindo a AST e o erro sintático) e o `sh tests/ia.sh` não foram executados nesta máquina e precisam ser repetidos em ambiente com Docker antes da apresentação.
-2. A integração real do Ollama (`OLLAMA_INTEGRACAO=1`), o download do modelo `llama3.2` e a verificação de persistência do volume após `docker compose down` e `up` não foram executados; dependem de uma máquina com memória suficiente (cerca de 4 GB livres).
-3. A demonstração no navegador (digitar o código, ver a AST, selecionar a multiplicação, pedir a explicação com IA e, depois, pedir a explicação de um erro sintático) ainda não foi feita com os contêineres em execução.
-4. Os testes de interface continuam usando o jsdom e simulam o servidor, inclusive o endpoint da IA; não substituem testes de ponta a ponta em navegador real.
+1. O download do modelo `llama3.2`, o `sh tests/ia.sh`, a integração real do Ollama (`OLLAMA_INTEGRACAO=1`) e a verificação de persistência do volume após `docker compose down` e `up` ainda não foram executados; dependem de baixar cerca de 4 GB do modelo. O endpoint da IA já foi verificado indiretamente: sem o modelo, responde HTTP 503 e não afeta a análise.
+2. A demonstração no navegador (digitar o código, ver a AST, selecionar a multiplicação, pedir a explicação com IA e, depois, pedir a explicação de um erro sintático) ainda não foi feita com os contêineres em execução.
+3. Os testes de interface continuam usando o jsdom e simulam o servidor, inclusive o endpoint da IA; não substituem testes de ponta a ponta em navegador real.
