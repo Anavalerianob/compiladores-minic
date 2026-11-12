@@ -78,13 +78,36 @@ A primeira tentativa falhou por permissão de acesso ao Docker (`permission deni
 
 ### Ambiente de execução
 
-Os testes unitários desta etapa foram executados primeiro fora dos contêineres, em um ambiente virtual com Python 3.14.4, pytest 8.3.3 e Flask 3.0.3, e no frontend com Node.js 22.22.1 e jsdom 25.0.1. Depois, o backend foi executado no contêiner, com Python 3.12, após a construção das imagens do zero. A integração real do Ollama e a demonstração no navegador ainda não foram executadas; estão listadas como pendências.
+Os testes unitários desta etapa foram executados primeiro fora dos contêineres, em um ambiente virtual com Python 3.14.4, pytest 8.3.3 e Flask 3.0.3, e no frontend com Node.js 22.22.1 e jsdom 25.0.1. Depois, o backend foi executado no contêiner, com Python 3.12, após a construção das imagens do zero. Por fim, com o modelo `llama3.2` baixado, foram executados o teste da IA, a integração real e a verificação de persistência do volume.
 
 ### Validação em instalação limpa
 
 Foram executados, em sequência, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy`, o frontend com a porta `8080:80` publicada e o contêiner `ollama` em execução com a porta 11434 apenas interna (não publicada no host). Em seguida, `sh tests/implantacao.sh` apresentou as 9 verificações aprovadas, incluindo as duas novas (a análise de `int resultado = 10 + 5 * 2;` contém `MULTIPLICACAO` e a de `int x = 5` contém `ERRO_SINTATICO`), e `docker compose run --rm backend pytest -q` apresentou 172 testes aprovados e 1 pulado, com Python 3.12.
 
-Sem o modelo `llama3.2` baixado, uma requisição a `POST /api/ia/explicar` respondeu HTTP 503 (assistente indisponível), e `POST /api/analisar` continuou respondendo normalmente. Isso confirma que a análise não depende do Ollama. O download do modelo, o `sh tests/ia.sh` e a integração real não foram executados por escolha, para não baixar os cerca de 4 GB do modelo nesta máquina.
+Antes de baixar o modelo, uma requisição a `POST /api/ia/explicar` respondeu HTTP 503 (assistente indisponível), e `POST /api/analisar` continuou respondendo normalmente, o que confirma que a análise não depende do Ollama.
+
+### Testes da IA com o modelo instalado
+
+Depois de `docker compose exec ollama ollama pull llama3.2` (o `ollama list` mostrou `llama3.2:latest`, 2.0 GB), foram executados:
+
+1. `sh tests/ia.sh`: 4 verificações aprovadas (contêiner do Ollama em execução, modelo instalado, explicação gerada por IA e explicação não vazia).
+2. `docker compose exec -e OLLAMA_INTEGRACAO=1 backend pytest -v tests/test_ia.py`: 19 testes aprovados, incluindo o `test_integracao_real_ollama`, que chama o Ollama de verdade.
+3. Persistência do volume: após `docker compose down` (sem `-v`) e `docker compose up -d`, o `ollama list` continuou mostrando o `llama3.2:latest` (2.0 GB), sem novo download.
+
+### Demonstração da IA
+
+Requisição a `POST /api/ia/explicar` (pelo proxy em `http://localhost:8080`), com o corpo:
+
+```json
+{ "tipo": "NO_AST", "codigo": "int resultado = 10 + 5 * 2;", "alvo": 4,
+  "pergunta": "Por que a multiplicação aparece abaixo da adição?" }
+```
+
+O backend reexecutou o scanner e o parser, montou o contexto do nó de id 4 (a MULTIPLICACAO) com o pai, os filhos e a gramática, e enviou ao modelo. A resposta (HTTP 200, `geradoPorIA` true, modelo `llama3.2`) levou cerca de 25,6 segundos na CPU e começou assim:
+
+"Vamos analisar a estrutura da AST: o nó pai é a ADICAO, com papel valor. O trecho é '10 + 5 * 2'... A multiplicativa é um nó filho direto da ADICAO, com papel direita e atributos (operador=*) e trecho '5 * 2'... A razão pela qual a multiplicação aparece abaixo da adição é que a gramática do MiniC define a expressão aditiva como composta por termos multiplicativos..."
+
+A explicação não é perfeita (o modelo mistura um pouco os conceitos), o que confirma a limitação registrada: a IA é apoio, e o resultado oficial é o do compilador.
 
 ### Resultados
 
@@ -119,6 +142,4 @@ A interface foi reorganizada em duas colunas (entrada fixa à esquerda, resultad
 
 ### Limitações e pendências
 
-1. O download do modelo `llama3.2`, o `sh tests/ia.sh`, a integração real do Ollama (`OLLAMA_INTEGRACAO=1`) e a verificação de persistência do volume após `docker compose down` e `up` ainda não foram executados; dependem de baixar cerca de 4 GB do modelo. O endpoint da IA já foi verificado indiretamente: sem o modelo, responde HTTP 503 e não afeta a análise.
-2. A demonstração no navegador (digitar o código, ver a AST, selecionar a multiplicação, pedir a explicação com IA e, depois, pedir a explicação de um erro sintático) ainda não foi feita com os contêineres em execução.
-3. Os testes de interface continuam usando o jsdom e simulam o servidor, inclusive o endpoint da IA; não substituem testes de ponta a ponta em navegador real.
+1. Os testes de interface continuam usando o jsdom e simulam o servidor, inclusive o endpoint da IA; não substituem testes de ponta a ponta automatizados em navegador real. A demonstração no navegador foi feita manualmente (abrir a aplicação, analisar `int resultado = 10 + 5 * 2;`, ver a AST, pedir a explicação com IA), mas não está automatizada.

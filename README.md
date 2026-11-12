@@ -360,9 +360,22 @@ O teste de integração real é pulado por padrão e só roda com a variável `O
 docker compose exec -e OLLAMA_INTEGRACAO=1 backend pytest -v tests/test_ia.py
 ```
 
-O script `tests/ia.sh` verifica, com os contêineres em execução, se o contêiner do Ollama está rodando, se o `llama3.2` aparece em `ollama list` e se `POST /api/ia/explicar` responde com uma explicação não vazia.
+O script `tests/ia.sh` verifica, com os contêineres em execução, se o contêiner do Ollama está rodando, se o `llama3.2` aparece em `ollama list` e se `POST /api/ia/explicar` responde com uma explicação não vazia. Em uma execução com o modelo instalado (2.0 GB), o `tests/ia.sh` passou nas 4 verificações e o `pytest -v tests/test_ia.py` com `OLLAMA_INTEGRACAO=1` passou nos 19 testes, incluindo a integração real. A persistência foi confirmada: após `docker compose down` (sem `-v`) e `up`, o `ollama list` continuou mostrando o `llama3.2` sem novo download.
 
-Limitações: a resposta pode demorar na CPU; o modelo pode errar, por isso o resultado oficial é sempre o do compilador; e o modelo precisa de memória suficiente para ser carregado. A demonstração com a pergunta, os dados enviados, a resposta obtida e o tempo medido ainda não foi registrada, porque depende de rodar o modelo em uma máquina com memória suficiente; está listada como pendência em `docs/testes.md`.
+### Exemplo da demonstração
+
+Requisição a `POST /api/ia/explicar` (pelo proxy em `http://localhost:8080`):
+
+```json
+{ "tipo": "NO_AST", "codigo": "int resultado = 10 + 5 * 2;", "alvo": 4,
+  "pergunta": "Por que a multiplicação aparece abaixo da adição?" }
+```
+
+O backend reexecutou o scanner e o parser, montou o contexto do nó de id 4 (a MULTIPLICACAO) com o nó pai, os filhos e a gramática, e enviou ao modelo. A resposta (HTTP 200, `geradoPorIA` true, modelo `llama3.2`) levou cerca de 25,6 segundos na CPU e começou assim:
+
+"Vamos analisar a estrutura da AST: o nó pai é a ADICAO, com papel valor. O trecho é '10 + 5 * 2'... A multiplicativa é um nó filho direto da ADICAO, com papel direita e atributos (operador=*) e trecho '5 * 2'... A razão pela qual a multiplicação aparece abaixo da adição é que a gramática do MiniC define a expressão aditiva como composta por termos multiplicativos..."
+
+Limitações: a resposta pode demorar na CPU (no exemplo acima, cerca de 25 segundos); o modelo pode errar, por isso o resultado oficial é sempre o do compilador (a explicação do exemplo mistura um pouco os conceitos); e o modelo precisa de memória suficiente para ser carregado (cerca de 4 GB livres para o modelo de 3B).
 
 ## Pré-requisitos
 
@@ -437,7 +450,7 @@ O teste da IA, manual, roda com `sh tests/ia.sh`, com os contêineres em execuç
 | Backend: IA com mock (integração real pulada) | 18 | 0 |
 | Frontend: interface, AST e IA (comunicação simulada) | 71 | 0 |
 
-A execução do backend resultou em 172 testes aprovados e 1 pulado (a integração real do Ollama), e a do frontend, em 71 aprovados. Nesta máquina, os testes foram executados fora dos contêineres, com Python 3.14.4 e Node.js 22.22.1. A execução no contêiner (Python 3.12), a construção das imagens do zero, o teste de implantação, o teste da IA e a integração real do Ollama estão listados como pendências em `docs/testes.md`, que traz o registro detalhado, as falhas encontradas, as correções e as alterações intencionais de contrato.
+A execução do backend resultou em 172 testes aprovados e 1 pulado por padrão, e a do frontend, em 79 aprovados. Com o modelo `llama3.2` instalado, a integração real do Ollama também foi executada (`OLLAMA_INTEGRACAO=1`), com 19 testes de IA aprovados, e o `tests/ia.sh` passou nas 4 verificações. A construção das imagens do zero, a subida dos contêineres e o teste de implantação (9 verificações) foram validados. O `docs/testes.md` traz o registro detalhado, as falhas encontradas, as correções, as alterações intencionais de contrato e a demonstração da IA.
 
 ## Validação de instalação limpa
 
