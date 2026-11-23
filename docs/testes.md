@@ -147,11 +147,11 @@ A resposta não contém mais EXPRESSAO nem OP_RELACIONAL, descreve a árvore cor
 | Parser: construções válidas, estrutura da AST das referências, precedência, associatividade, posições, ordem de criação, ids, casos de erro, recuperação, limite de aninhamento e integração com o scanner | Unitário | `pytest -v tests/test_parser.py` | 47 | 0 |
 | API: validação, endpoints, contrato da etapa 3 preservado e contrato da etapa 4 com `lexico` e `sintatico` | Endpoint e regressão | `pytest -v tests/test_api.py` | 30 | 0 |
 | IA: extração do conteúdo, aterramento do contexto (tipos exatos, nó marcado), system prompt, temperatura, limpeza de Markdown, 400, 502, 503, 504, mensagens sem endereço e regressão com IA indisponível | Unitário com mock | `pytest -v tests/test_ia.py` | 22 | 0 |
-| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA, abas do layout e limpeza de Markdown | Interface | `cd frontend && npm install && npm test` | 82 | 0 |
+| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA, abas do layout e limpeza de Markdown | Interface | `cd frontend && npm install && npm test` | 83 | 0 |
 
-A execução completa do backend (`pytest -v`) resultou em 176 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 82 testes aprovados e 0 reprovados. Total automatizado desta execução: 258 testes aprovados, 0 reprovados e 1 pulado.
+A execução completa do backend (`pytest -v`) resultou em 176 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 83 testes aprovados e 0 reprovados. Total automatizado desta execução: 259 testes aprovados, 0 reprovados e 1 pulado.
 
-O conjunto de interface passou de 42 para 82 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, mais os testes da AST, da IA, das abas do novo layout e da limpeza de Markdown. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4. O conjunto da IA passou de 18 para 22, com os testes do aterramento do contexto.
+O conjunto de interface passou de 42 para 83 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, mais os testes da AST, da IA, das abas do novo layout e da limpeza de Markdown. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4. O conjunto da IA passou de 18 para 22, com os testes do aterramento do contexto.
 
 ### Reorganização da interface
 

@@ -363,7 +363,7 @@ O teste de integração real é pulado por padrão e só roda com a variável `O
 docker compose exec -e OLLAMA_INTEGRACAO=1 backend pytest -v tests/test_ia.py
 ```
 
-O script `tests/ia.sh` verifica, com os contêineres em execução, se o contêiner do Ollama está rodando, se o `llama3.2` aparece em `ollama list` e se `POST /api/ia/explicar` responde com uma explicação não vazia. Em uma execução com o modelo instalado (2.0 GB), o `tests/ia.sh` passou nas 4 verificações e o `pytest -v tests/test_ia.py` com `OLLAMA_INTEGRACAO=1` passou nos 19 testes, incluindo a integração real. A persistência foi confirmada: após `docker compose down` (sem `-v`) e `up`, o `ollama list` continuou mostrando o `llama3.2` sem novo download.
+O script `tests/ia.sh` verifica, com os contêineres em execução, se o contêiner do Ollama está rodando, se o `llama3.2` aparece em `ollama list` e se `POST /api/ia/explicar` responde com uma explicação não vazia. Em uma execução com o modelo instalado (2.0 GB), o `tests/ia.sh` passou nas 4 verificações e o `pytest -v tests/test_ia.py` com `OLLAMA_INTEGRACAO=1` passou nos 23 testes, incluindo a integração real. A persistência foi confirmada: após `docker compose down` (sem `-v`) e `up`, o `ollama list` continuou mostrando o `llama3.2` sem novo download.
 
 ### Exemplo da demonstração
 
@@ -450,10 +450,10 @@ O teste da IA, manual, roda com `sh tests/ia.sh`, com os contêineres em execuç
 | Backend: scanner (regressão) | 77 | 0 |
 | Backend: parser e AST | 47 | 0 |
 | Backend: validação, endpoints e contrato da etapa 4 | 30 | 0 |
-| Backend: IA com mock (integração real pulada) | 18 | 0 |
-| Frontend: interface, AST e IA (comunicação simulada) | 71 | 0 |
+| Backend: IA com mock (integração real pulada) | 22 | 0 |
+| Frontend: interface, AST e IA (comunicação simulada) | 83 | 0 |
 
-A execução do backend resultou em 172 testes aprovados e 1 pulado por padrão, e a do frontend, em 79 aprovados. Com o modelo `llama3.2` instalado, a integração real do Ollama também foi executada (`OLLAMA_INTEGRACAO=1`), com 19 testes de IA aprovados, e o `tests/ia.sh` passou nas 4 verificações. A construção das imagens do zero, a subida dos contêineres e o teste de implantação (9 verificações) foram validados. O `docs/testes.md` traz o registro detalhado, as falhas encontradas, as correções, as alterações intencionais de contrato e a demonstração da IA.
+A execução do backend resultou em 176 testes aprovados e 1 pulado por padrão, e a do frontend, em 83 aprovados. Com o modelo `llama3.2` instalado, a integração real do Ollama também foi executada (`OLLAMA_INTEGRACAO=1`), com 23 testes de IA aprovados, e o `tests/ia.sh` passou nas 4 verificações. A construção das imagens do zero, a subida dos contêineres e o teste de implantação (9 verificações) foram validados. O `docs/testes.md` traz o registro detalhado, as falhas encontradas, as correções, as alterações intencionais de contrato e a demonstração da IA.
 
 ## Validação de instalação limpa
 
