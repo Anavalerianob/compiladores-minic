@@ -272,6 +272,16 @@ test("exemplo carregado pode ser editado e o código editado é enviado", async 
   assert.strictEqual(corpo.codigo, EXEMPLOS.declaracao.codigo + "\nint extra = 1;");
 });
 
+test("editar o código limpa o seletor de exemplos", () => {
+  const tela = montarTela(respostaSucesso);
+  tela.seletor.value = "aninhado";
+  tela.seletor.dispatchEvent(tela.evento("change"));
+  assert.strictEqual(tela.seletor.value, "aninhado");
+  tela.campo.value = tela.campo.value + "\nint extra = 1;";
+  tela.campo.dispatchEvent(tela.evento("input"));
+  assert.strictEqual(tela.seletor.value, "");
+});
+
 // Testes de validação no frontend
 
 test("validarCodigo identifica vazio, espaços e código válido", () => {

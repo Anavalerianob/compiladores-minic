@@ -1116,6 +1116,8 @@ function iniciar(doc, fetchFn, temporizador) {
   });
 
   campo.addEventListener("input", function () {
+    // Ao editar, o código deixa de ser o exemplo escolhido: limpa o seletor.
+    if (seletor.value !== "") seletor.value = "";
     if (analise) {
       mostrar("info", MENSAGENS.alterado);
       secao.classList.add("desatualizada");
