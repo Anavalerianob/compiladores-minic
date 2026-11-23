@@ -171,6 +171,9 @@ A etapa 4 não acrescentou dependências ao backend (Flask e pytest) nem ao fron
 │   ├── ast.md               Formato da AST e exemplo completo
 │   ├── fluxograma.md        Fluxogramas do processamento e da IA
 │   ├── materiais-e-metodos.md   Decisões técnicas e critérios de avaliação
+│   ├── arquitetura.md       Diagrama da arquitetura e do fluxo de processamento
+│   ├── casos-de-teste.md    Casos de teste (CT-01 a CT-34) com resultado observado
+│   ├── plano-de-avaliacao.md    Critérios e plano de avaliação por pares
 │   └── testes.md            Registro dos testes executados
 ├── docker-compose.yml
 └── README.md
