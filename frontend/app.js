@@ -342,6 +342,11 @@ function iniciar(doc, fetchFn, temporizador) {
   const astVelocidade = doc.getElementById("ast-velocidade");
   const astCompletaBtn = doc.getElementById("ast-arvore-completa");
   const astPassoInfo = doc.getElementById("ast-passo-info");
+  const arvoreSvg = doc.getElementById("arvore-svg");
+  const svgContainer = doc.getElementById("arvore-svg-container");
+  const listaContainer = doc.querySelector(".arvore-container");
+  const astModoBtn = doc.getElementById("ast-modo");
+  const faixaEtapas = doc.getElementById("faixa-etapas");
   const iaResposta = doc.getElementById("ia-resposta");
   const iaPergunta = doc.getElementById("ia-pergunta");
   const iaEnviar = doc.getElementById("ia-enviar");
@@ -377,6 +382,12 @@ function iniciar(doc, fetchFn, temporizador) {
   let intermediarioDados = null;
   let intAtual = -1;
   let intReproducao = null;
+
+  // Estado da árvore desenhada (SVG). O modo desenho é o padrão.
+  let modoDesenho = true;
+  let svgPos = {};
+  let svgNos = [];
+  let svgDims = { largura: 0, altura: 0, LARG: 164, ALT: 38 };
   let atual = -1;
   let reproducao = null;
 
@@ -597,6 +608,7 @@ function iniciar(doc, fetchFn, temporizador) {
     const nLexico = analise.erros.length;
     const nSintatico = (dados.sintatico && Array.isArray(dados.sintatico.erros)) ? dados.sintatico.erros.length : 0;
     atualizarContadorErros(nLexico + nSintatico);
+    atualizarFaixaErros(nLexico, nSintatico);
     revelarResultados();
     ativarAba(nLexico + nSintatico > 0 ? "erros" : "arvore");
   }
@@ -611,7 +623,9 @@ function iniciar(doc, fetchFn, temporizador) {
     intermediarioDados = null;
     secao.hidden = true;
     secaoSintatica.hidden = true;
+    arvoreSvg.replaceChildren();
     atualizarContadorErros(0);
+    limparFaixa();
     esconderResultados();
   }
 
@@ -631,6 +645,7 @@ function iniciar(doc, fetchFn, temporizador) {
     secaoErrosSint.hidden = true;
     secaoArvore.hidden = true;
     noDetalhes.replaceChildren();
+    arvoreSvg.replaceChildren();
     astRaiz = null;
     noSelecionado = null;
     limparDestaqueAst();
@@ -701,6 +716,8 @@ function iniciar(doc, fetchFn, temporizador) {
     secaoArvore.hidden = false;
     astPasso = null;
     montarArvore([astRaiz], null);
+    prepararSvg();
+    desenharSvgCompleto();
     astPassoInfo.replaceChildren(elemento("p",
       "Árvore completa: " + totalNos + " nó(s). Use Próximo ou as setas para ver a construção passo a passo."));
     atualizarControlesAst();
@@ -784,6 +801,117 @@ function iniciar(doc, fetchFn, temporizador) {
     }
     destacarCodigoETokens(no);
     mostrarDetalhes(no);
+    marcarSelecaoSvg(id);
+  }
+
+  // Reflete a seleção no desenho SVG (a lista continua sendo a versão por teclado).
+  function marcarSelecaoSvg(id) {
+    for (const g of arvoreSvg.querySelectorAll(".no-svg.selecionado")) g.classList.remove("selecionado");
+    const g = arvoreSvg.querySelector('.no-svg[data-id="' + id + '"]');
+    if (g) g.classList.add("selecionado");
+  }
+
+  // Layout em camadas: cada folha ocupa um espaço; o pai fica centralizado sobre os filhos.
+  function prepararSvg() {
+    svgPos = {};
+    svgNos = aplanarAst(astRaiz);
+    const LARG = 164, ALT = 38, HGAP = 14, VGAP = 34;
+    let folha = 0;
+    let maxProf = 0;
+    (function medir(no, prof) {
+      if (prof > maxProf) maxProf = prof;
+      let cx;
+      if (no.filhos.length === 0) {
+        cx = folha * (LARG + HGAP) + LARG / 2;
+        folha += 1;
+      } else {
+        const centros = no.filhos.map(function (f) { return medir(f, prof + 1); });
+        cx = (centros[0] + centros[centros.length - 1]) / 2;
+      }
+      svgPos[no.id] = { cx: cx, cy: prof * (ALT + VGAP) + ALT / 2 };
+      return cx;
+    })(astRaiz, 0);
+    svgDims = {
+      largura: Math.max(folha * (LARG + HGAP), LARG) + HGAP,
+      altura: (maxProf + 1) * (ALT + VGAP),
+      LARG: LARG, ALT: ALT
+    };
+  }
+
+  function encurtarRotulo(texto, limite) {
+    return texto.length > limite ? texto.slice(0, limite - 1) + "…" : texto;
+  }
+
+  function desenharSvg(mostrar, ordemCriado) {
+    const NS = "http://www.w3.org/2000/svg";
+    const LARG = svgDims.LARG, ALT = svgDims.ALT;
+    const fragmento = doc.createDocumentFragment();
+    // Arestas primeiro, para ficarem atrás das caixas.
+    for (const no of svgNos) {
+      if (!mostrar(no)) continue;
+      const p = svgPos[no.id];
+      for (const filho of no.filhos) {
+        if (!mostrar(filho)) continue;
+        const c = svgPos[filho.id];
+        const linha = doc.createElementNS(NS, "line");
+        linha.setAttribute("class", "aresta-svg");
+        linha.setAttribute("x1", p.cx);
+        linha.setAttribute("y1", p.cy + ALT / 2);
+        linha.setAttribute("x2", c.cx);
+        linha.setAttribute("y2", c.cy - ALT / 2);
+        fragmento.appendChild(linha);
+      }
+    }
+    for (const no of svgNos) {
+      if (!mostrar(no)) continue;
+      const pos = svgPos[no.id];
+      const cat = categoriaNo(no.tipo);
+      const g = doc.createElementNS(NS, "g");
+      let classe = "no-svg " + cat.classe;
+      if (ordemCriado !== null && ordemCriado !== undefined && no.ordem === ordemCriado) classe += " no-criado";
+      if (noSelecionado === no.id) classe += " selecionado";
+      g.setAttribute("class", classe);
+      g.setAttribute("data-id", String(no.id));
+      g.setAttribute("role", "button");
+      g.setAttribute("aria-label", no.rotulo);
+      const titulo = doc.createElementNS(NS, "title");
+      titulo.textContent = no.rotulo;   // rótulo acessível e tooltip
+      const rect = doc.createElementNS(NS, "rect");
+      rect.setAttribute("x", pos.cx - LARG / 2);
+      rect.setAttribute("y", pos.cy - ALT / 2);
+      rect.setAttribute("width", LARG);
+      rect.setAttribute("height", ALT);
+      rect.setAttribute("rx", 3);
+      const texto = doc.createElementNS(NS, "text");
+      texto.setAttribute("x", pos.cx);
+      texto.setAttribute("y", pos.cy);
+      texto.setAttribute("text-anchor", "middle");
+      texto.setAttribute("dominant-baseline", "central");
+      texto.textContent = encurtarRotulo(no.rotulo, 22);
+      g.append(titulo, rect, texto);
+      g.addEventListener("click", function () { selecionarNo(no.id); });
+      fragmento.appendChild(g);
+    }
+    arvoreSvg.replaceChildren(fragmento);
+    arvoreSvg.setAttribute("width", svgDims.largura);
+    arvoreSvg.setAttribute("height", svgDims.altura);
+    arvoreSvg.setAttribute("viewBox", "0 0 " + svgDims.largura + " " + svgDims.altura);
+  }
+
+  function desenharSvgCompleto() {
+    desenharSvg(function () { return true; }, null);
+  }
+
+  function desenharSvgPasso(k) {
+    desenharSvg(function (no) { return no.ordem <= k; }, k);
+  }
+
+  function alternarModoArvore() {
+    modoDesenho = !modoDesenho;
+    svgContainer.hidden = !modoDesenho;
+    listaContainer.hidden = modoDesenho;
+    astModoBtn.textContent = modoDesenho ? "Ver como lista" : "Ver como desenho";
+    astModoBtn.setAttribute("aria-pressed", String(!modoDesenho));
   }
 
   function destacarCodigoETokens(no) {
@@ -915,6 +1043,7 @@ function iniciar(doc, fetchFn, temporizador) {
     astPasso = k;
     const criado = nosPorOrdem[k];
     montarArvore(raizesDoPasso(astRaiz, k), k);
+    desenharSvgPasso(k);
     destacarCodigoETokens(criado);
     const lexemas = lexemasDoNo(criado);
     astPassoInfo.replaceChildren(elemento("p",
@@ -947,6 +1076,7 @@ function iniciar(doc, fetchFn, temporizador) {
     astPausar();
     astPasso = null;
     montarArvore([astRaiz], null);
+    desenharSvgCompleto();
     limparDestaqueAst();
     astPassoInfo.replaceChildren(elemento("p",
       "Árvore completa: " + totalNos + " nó(s). Use Próximo ou as setas para ver a construção passo a passo."));
@@ -1046,6 +1176,38 @@ function iniciar(doc, fetchFn, temporizador) {
       tab.tabIndex = ativa ? 0 : -1;
       painel.hidden = !ativa;
     }
+    marcarEtapaAtiva(nome);
+  }
+
+  // ----- Faixa de etapas da compilação -----
+
+  function marcarEtapaAtiva(nomeAba) {
+    for (const etapa of faixaEtapas.querySelectorAll(".etapa")) {
+      if (etapa.dataset.etapa === nomeAba) etapa.setAttribute("aria-current", "step");
+      else etapa.removeAttribute("aria-current");
+    }
+  }
+
+  function atualizarFaixaErros(nLexico, nSintatico) {
+    doc.getElementById("etapa-tokens").classList.toggle("tem-erro", nLexico > 0);
+    doc.getElementById("etapa-arvore").classList.toggle("tem-erro", nSintatico > 0);
+  }
+
+  function limparFaixa() {
+    marcarEtapaAtiva(null);
+    for (const etapa of faixaEtapas.querySelectorAll(".etapa")) etapa.classList.remove("tem-erro");
+  }
+
+  function irParaEtapa(nome) {
+    if (nome === "semantico") return;  // ainda não implementada
+    if (nome === "codigo") {
+      if (typeof campo.focus === "function") campo.focus();
+      if (typeof campo.scrollIntoView === "function") {
+        campo.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+    ativarAba(nome);
   }
 
   function atualizarContadorErros(total) {
@@ -1263,6 +1425,12 @@ function iniciar(doc, fetchFn, temporizador) {
     if (tab) tab.addEventListener("click", function () { ativarAba(a.nome); });
   }
   abas.addEventListener("keydown", navegarAbas);
+
+  astModoBtn.addEventListener("click", alternarModoArvore);
+  faixaEtapas.addEventListener("click", function (evento) {
+    const etapa = evento.target.closest ? evento.target.closest(".etapa") : null;
+    if (etapa && !etapa.disabled) irParaEtapa(etapa.dataset.etapa);
+  });
 
   intAnteriorBtn.addEventListener("click", intVoltar);
   intProximoBtn.addEventListener("click", intAvancar);

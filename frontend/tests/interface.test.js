@@ -865,6 +865,8 @@ test("uma árvore grande é renderizada sem quebrar", async () => {
   tela.campo.value = "grande";
   await clicarEAguardar(tela);
   assert.strictEqual(itensArvore(tela).length, total);
+  // O desenho SVG também renderiza um elemento por nó, sem travar.
+  assert.strictEqual(tela.doc.querySelectorAll("#arvore-svg .no-svg").length, total);
 });
 
 // Testes das explicações com IA (etapa 4, diferencial)
@@ -1177,6 +1179,75 @@ test("sem análise válida, o intermediário mostra a situação e esconde as ta
   await clicarEAguardar(tela);
   assert.strictEqual(tela.doc.getElementById("int-conteudo").hidden, true);
   assert.match(tela.doc.getElementById("int-situacao").textContent, /análise sintática/);
+});
+
+// Testes da árvore desenhada (SVG) e da faixa de etapas
+
+function nosSvg(tela) {
+  return tela.doc.querySelectorAll("#arvore-svg .no-svg");
+}
+
+test("o modo desenho é o padrão e renderiza um elemento SVG por nó", async () => {
+  const tela = await analisarPrecedencia();
+  assert.strictEqual(tela.doc.getElementById("arvore-svg-container").hidden, false);
+  assert.strictEqual(tela.doc.querySelector(".arvore-container").hidden, true);
+  assert.strictEqual(nosSvg(tela).length, 7);
+  // Cada nó do desenho tem rótulo acessível.
+  const primeiro = nosSvg(tela)[0];
+  assert.ok(primeiro.querySelector("title"));
+  assert.ok(primeiro.getAttribute("aria-label"));
+});
+
+test("clicar num nó do desenho seleciona o mesmo nó (lista e detalhes)", async () => {
+  const tela = await analisarPrecedencia();
+  const gAdicao = tela.doc.querySelector('#arvore-svg .no-svg[data-id="5"]');
+  gAdicao.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(gAdicao.classList.contains("selecionado"), true);
+  assert.strictEqual(tela.doc.querySelector('#arvore-ast [data-id="5"]').getAttribute("aria-selected"), "true");
+  assert.match(tela.doc.getElementById("no-detalhes").textContent, /Adição/);
+});
+
+test("o passo a passo mostra só os nós já criados no desenho", async () => {
+  const tela = await analisarPrecedencia();
+  tela.doc.getElementById("ast-proximo").dispatchEvent(tela.evento("click"));
+  assert.strictEqual(nosSvg(tela).length, 1);
+  for (let i = 0; i < 3; i++) tela.doc.getElementById("ast-proximo").dispatchEvent(tela.evento("click"));
+  assert.strictEqual(nosSvg(tela).length, 4);   // ordem <= 4: três literais e a multiplicação
+  tela.doc.getElementById("ast-arvore-completa").dispatchEvent(tela.evento("click"));
+  assert.strictEqual(nosSvg(tela).length, 7);
+});
+
+test("o botão alterna entre desenho e lista", async () => {
+  const tela = await analisarPrecedencia();
+  const botao = tela.doc.getElementById("ast-modo");
+  assert.strictEqual(botao.textContent, "Ver como lista");
+  botao.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(tela.doc.getElementById("arvore-svg-container").hidden, true);
+  assert.strictEqual(tela.doc.querySelector(".arvore-container").hidden, false);
+  assert.strictEqual(botao.textContent, "Ver como desenho");
+});
+
+test("a faixa de etapas abre a aba e marca a etapa ativa", async () => {
+  const tela = await analisarPrecedencia();
+  assert.strictEqual(tela.doc.getElementById("etapa-arvore").getAttribute("aria-current"), "step");
+  tela.doc.getElementById("etapa-intermediario").dispatchEvent(tela.evento("click"));
+  assert.strictEqual(tela.doc.getElementById("aba-intermediario").getAttribute("aria-selected"), "true");
+  assert.strictEqual(tela.doc.getElementById("etapa-intermediario").getAttribute("aria-current"), "step");
+  assert.strictEqual(tela.doc.getElementById("etapa-arvore").getAttribute("aria-current"), null);
+});
+
+test("a etapa Semântico fica desabilitada com 'em breve'", () => {
+  const tela = montarTela(respostaSucesso);
+  const sem = tela.doc.getElementById("etapa-semantico");
+  assert.strictEqual(sem.disabled, true);
+  assert.match(sem.textContent, /em breve/);
+});
+
+test("etapa com erro léxico recebe marca vermelha", async () => {
+  const tela = montarTela(respostaComErro);
+  tela.campo.value = "int a = 5 @ 2;";
+  await clicarEAguardar(tela);
+  assert.strictEqual(tela.doc.getElementById("etapa-tokens").classList.contains("tem-erro"), true);
 });
 
 // Teste de segurança

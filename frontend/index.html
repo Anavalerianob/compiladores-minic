@@ -5,6 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MiniC Analisador</title>
   <style>
+    /* Tipografia local (IBM Plex, licença OFL em fonts/OFL.txt). Sem CDN. */
+    @font-face {
+      font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400; font-display: swap;
+      src: url("fonts/IBMPlexSans-Regular.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Sans"; font-style: normal; font-weight: 500; font-display: swap;
+      src: url("fonts/IBMPlexSans-Medium.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap;
+      src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap;
+      src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2");
+    }
+    :root {
+      --papel: #f6f1e4;
+      --cartao: #fbf8ef;
+      --tinta: #1f2f5c;
+      --grafite: #3a3a3a;
+      --erro: #b42318;
+      --sucesso: #1e5631;
+      --margem: #c4302b;
+      --borda: #d8cfb8;
+      --pauta: rgba(31, 47, 92, 0.06);
+      --realce: #fbf0c9;
+    }
     body {
       font-family: Arial, sans-serif;
       background: #f4f6f8;
@@ -215,6 +244,132 @@
       .ast-ferramentas label { margin: 8px 0 0; }
       #no-detalhes dl { grid-template-columns: 1fr; }
     }
+
+    /* ===== Tema caderno de Compiladores (sobrepõe o visual, sem mudar o comportamento) ===== */
+    body {
+      font-family: "IBM Plex Sans", Arial, sans-serif;
+      color: var(--tinta);
+      background-color: var(--papel);
+      background-image: repeating-linear-gradient(
+        to bottom, transparent 0, transparent 27px, var(--pauta) 27px, var(--pauta) 28px);
+      background-attachment: fixed;
+      line-height: 1.55;
+    }
+    .coluna-entrada, .coluna-resultados {
+      background: var(--cartao);
+      border: 1px solid var(--borda);
+      border-radius: 3px;
+      box-shadow: none;
+    }
+    /* Margem vermelha fina à esquerda do painel de código. */
+    .coluna-entrada { border-left: 3px solid var(--margem); }
+    h1 { font-weight: 500; letter-spacing: 0.01em; }
+    .subtitulo { color: var(--grafite); }
+    .fase { color: var(--tinta); }
+    label { color: var(--tinta); }
+    textarea, .codigo-destacado, .passo-info ol {
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+    }
+    textarea { background: #fffdf7; border: 1px solid var(--borda); border-radius: 3px; color: var(--tinta); }
+    .codigo-destacado { background: #fffdf7; border: 1px solid var(--borda); border-radius: 3px; }
+    select { border: 1px solid var(--borda); border-radius: 3px; background: #fffdf7; color: var(--tinta); }
+
+    /* Botões com cara de etiqueta: borda 1,5px na tinta, fundo transparente, sem sombra. */
+    button {
+      font-family: "IBM Plex Sans", Arial, sans-serif;
+      background: transparent; color: var(--tinta);
+      border: 1.5px solid var(--tinta); border-radius: 3px;
+      box-shadow: none; padding: 8px 16px;
+    }
+    button:hover { background: rgba(31, 47, 92, 0.08); }
+    button#analisar { background: var(--tinta); color: var(--papel); }
+    button#analisar:hover { background: #17244a; }
+    button:disabled, button[aria-disabled="true"] {
+      background: transparent; color: #9a9480; border-color: #cfc6b0; cursor: not-allowed;
+    }
+    button#analisar:disabled { background: #b9b298; color: #fffdf7; border-color: #b9b298; }
+    .ia-sugestoes button, .botao-ia { background: transparent; color: var(--tinta); border-color: var(--tinta); }
+    .ia-sugestoes button:hover, .botao-ia:hover { background: rgba(31, 47, 92, 0.08); }
+
+    /* Abas. */
+    .abas { border-bottom: 2px solid var(--tinta); }
+    .aba { background: transparent; color: var(--tinta); border: 1.5px solid var(--borda); border-bottom: none; }
+    .aba:hover { background: rgba(31, 47, 92, 0.08); }
+    .aba[aria-selected="true"], .aba[aria-selected="true"]:hover {
+      background: var(--tinta); color: var(--papel); border-color: var(--tinta);
+    }
+
+    /* Resultado e situações. */
+    .resultado { background: #fffdf7; border: 1px solid var(--borda); border-radius: 3px; }
+    .resultado.sucesso { background: #e7efe3; color: var(--sucesso); border-color: #b9ccb0; }
+    .resultado.erro { background: #f7e4e1; color: var(--erro); border-color: #e0b6b0; }
+    .resultado.info { background: #eef1f8; color: var(--tinta); border-color: #c7cfe0; }
+    details { background: #fffdf7; border: 1px solid var(--borda); border-radius: 3px; }
+    summary { color: var(--tinta); }
+
+    /* Tabelas como desenhadas no caderno: grade fina, cabeçalho em versalete. */
+    table { font-family: "IBM Plex Mono", "Courier New", monospace; }
+    th, td { border: 1px solid var(--borda); }
+    th {
+      font-variant: small-caps; letter-spacing: 0.04em; font-weight: 500;
+      background: rgba(31, 47, 92, 0.05); color: var(--tinta);
+    }
+    tbody tr:hover { background: #f3eed9; }
+    tbody tr.atual { background: var(--realce); font-weight: 700; }
+    tbody tr.no-destaque { background: #eef1f8; }
+    caption { color: var(--grafite); }
+
+    /* Erros em vermelho de correção. */
+    .tk-erro { color: var(--erro); text-decoration: underline wavy var(--erro); }
+    #lista-erros-sintaticos li { border-left-color: var(--erro); background: #f7e4e1; }
+    .erro-rotulo { color: var(--erro); }
+    #sintatico-situacao:not(:empty) { border-left-color: var(--tinta); background: #eef1f8; color: var(--tinta); }
+    .passo-info { border-left-color: var(--tinta); background: #fffdf7; border: 1px solid var(--borda); border-left-width: 4px; }
+    #no-detalhes { background: #fffdf7; border-color: var(--borda); }
+    #ia-resposta:not(:empty) { background: #fffdf7; border-color: var(--borda); }
+    .ia-aviso, .aviso-desatualizada { background: #faf3dc; color: #6b5200; border: 1px solid #e3d9b4; }
+    a:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible,
+    summary:focus-visible, tr:focus-visible, pre:focus-visible, .etapa:focus-visible, .no-svg:focus-visible {
+      outline: 3px solid #b38600; outline-offset: 2px;
+    }
+
+    /* Faixa de etapas da compilação no cabeçalho. */
+    .faixa-etapas {
+      list-style: none; display: flex; flex-wrap: wrap; gap: 6px;
+      margin: 10px 0 0; padding: 0;
+    }
+    .etapa {
+      font-family: "IBM Plex Sans", Arial, sans-serif; font-size: 0.9rem;
+      display: inline-flex; align-items: center; gap: 6px;
+      background: transparent; color: var(--tinta);
+      border: 1.5px solid var(--borda); border-radius: 3px;
+      padding: 6px 12px; min-height: 44px; margin-top: 0; cursor: pointer;
+    }
+    .etapa .num { font-family: "IBM Plex Mono", monospace; font-weight: 700; }
+    .etapa:hover { background: rgba(31, 47, 92, 0.08); }
+    .etapa[aria-current="step"] { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+    .etapa.tem-erro { border-color: var(--erro); color: var(--erro); }
+    .etapa.tem-erro[aria-current="step"] { background: var(--erro); color: var(--papel); border-color: var(--erro); }
+    .etapa[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+    .etapa .em-breve { font-size: 0.72rem; font-style: italic; }
+
+    /* Árvore desenhada em SVG. */
+    .arvore-svg-container { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+    svg.arvore-svg { display: block; }
+    .no-svg { cursor: pointer; }
+    .no-svg rect { fill: var(--cartao); stroke: var(--tinta); stroke-width: 1.5; }
+    .no-svg text { font-family: "IBM Plex Sans", Arial, sans-serif; font-size: 12px; fill: var(--tinta); }
+    .no-svg.selecionado rect { fill: var(--realce); stroke: #9a7d16; stroke-width: 2.5; }
+    .no-svg.no-criado rect { stroke: var(--tinta); stroke-width: 3; }
+    .aresta-svg { stroke: #bcb496; stroke-width: 1.5; fill: none; }
+    .arvore-svg .marca-Declaracao rect { fill: #efe6fb; }
+    .arvore-svg .marca-Comando rect { fill: #e3eefa; }
+    .arvore-svg .marca-Operacao rect { fill: #fbe6ef; }
+    .arvore-svg .marca-Valor rect { fill: #fdf0dc; }
+
+    @media (max-width: 600px) {
+      .faixa-etapas { flex-wrap: nowrap; overflow-x: auto; }
+    }
   </style>
 </head>
 <body>
@@ -222,6 +377,13 @@
     <h1>MiniC Analisador</h1>
     <p class="subtitulo">Software educacional de compiladores. Linguagem analisada: subconjunto da linguagem C (MiniC).</p>
     <p class="fase">Fases disponíveis: análise léxica (scanner) e análise sintática (parser e AST)</p>
+    <ol class="faixa-etapas" id="faixa-etapas" aria-label="Etapas da compilação">
+      <li><button class="etapa" type="button" id="etapa-codigo" data-etapa="codigo"><span class="num">1</span> Código</button></li>
+      <li><button class="etapa" type="button" id="etapa-tokens" data-etapa="tokens"><span class="num">2</span> Tokens</button></li>
+      <li><button class="etapa" type="button" id="etapa-arvore" data-etapa="arvore"><span class="num">3</span> Árvore</button></li>
+      <li><button class="etapa" type="button" id="etapa-intermediario" data-etapa="intermediario"><span class="num">4</span> Intermediário</button></li>
+      <li><button class="etapa" type="button" id="etapa-semantico" data-etapa="semantico" disabled aria-disabled="true"><span class="num">5</span> Semântico <span class="em-breve">em breve</span></button></li>
+    </ol>
   </header>
 
   <main class="layout">
@@ -341,6 +503,7 @@ primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao
               <label for="ast-filtro">Filtrar por tipo</label>
               <select id="ast-filtro"><option value="">Todos os nós</option></select>
               <button id="ast-exportar" type="button">Exportar AST (JSON)</button>
+              <button id="ast-modo" type="button" aria-pressed="false">Ver como lista</button>
             </div>
 
             <h3>Construção passo a passo</h3>
@@ -359,7 +522,11 @@ primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao
             </div>
             <div id="ast-passo-info" class="passo-info" aria-live="polite"></div>
 
-            <div class="arvore-container">
+            <div id="arvore-svg-container" class="arvore-svg-container">
+              <svg id="arvore-svg" class="arvore-svg" role="group" aria-label="Árvore sintática abstrata desenhada. Use o botão Ver como lista para a versão navegável por teclado."></svg>
+            </div>
+
+            <div class="arvore-container" hidden>
               <ul id="arvore-ast" class="arvore" role="tree" aria-label="Árvore sintática abstrata do programa"></ul>
             </div>
 
@@ -449,6 +616,6 @@ primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao
     </section>
   </main>
 
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
