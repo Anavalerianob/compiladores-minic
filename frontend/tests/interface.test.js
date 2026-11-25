@@ -118,13 +118,33 @@ const AST_PRECEDENCIA = no({
   })]
 });
 
+// Código intermediário de "int resultado = 10 + 5 * 2;" (ids dos nós: MULT 4, ADICAO 5, DECLARACAO 6).
+const INTERMEDIARIO_PRECEDENCIA = {
+  tres_enderecos: [
+    { texto: "_t1 = 5 * 2", no: 4 },
+    { texto: "_t2 = 10 + _t1", no: 5 },
+    { texto: "resultado = _t2", no: 6 }
+  ],
+  quadruplas: [
+    { op: "*", arg1: "5", arg2: "2", resultado: "_t1", no: 4 },
+    { op: "+", arg1: "10", arg2: "_t1", resultado: "_t2", no: 5 },
+    { op: "=", arg1: "_t2", arg2: null, resultado: "resultado", no: 6 }
+  ],
+  triplas: [
+    { numero: 1, op: "*", arg1: "5", arg2: "2", no: 4 },
+    { numero: 2, op: "+", arg1: "10", arg2: "(1)", no: 5 },
+    { numero: 3, op: "=", arg1: "resultado", arg2: "(2)", no: 6 }
+  ]
+};
+
 function respostaPrecedencia() {
   return respostaJson(200, {
     recebido: true, sucesso: true,
     mensagem: "Análise léxica e sintática concluídas sem erros: 9 token(s) e 7 nó(s) na AST.",
     linhas: 1, caracteres: 27, tokens: TOKENS_PRECEDENCIA, erros: [],
     lexico: { sucesso: true, tokens: TOKENS_PRECEDENCIA, erros: [] },
-    sintatico: { executado: true, sucesso: true, ast: AST_PRECEDENCIA, erros: [] }
+    sintatico: { executado: true, sucesso: true, ast: AST_PRECEDENCIA, erros: [] },
+    intermediario: INTERMEDIARIO_PRECEDENCIA
   });
 }
 
@@ -1100,6 +1120,63 @@ test("limpar a entrada após a análise esconde as abas e mostra o placeholder",
   await clicarEAguardar(tela);
   assert.strictEqual(tela.doc.getElementById("abas").hidden, true);
   assert.strictEqual(tela.doc.getElementById("resultados-placeholder").hidden, false);
+});
+
+// Testes da aba Código intermediário
+
+test("a aba Código intermediário exibe as três tabelas", async () => {
+  const tela = await analisarPrecedencia();
+  assert.ok(tela.doc.getElementById("aba-intermediario"));
+  assert.strictEqual(tela.doc.getElementById("int-conteudo").hidden, false);
+  assert.strictEqual(tela.doc.querySelectorAll("#corpo-tres tr").length, 3);
+  assert.strictEqual(tela.doc.querySelectorAll("#corpo-quad tr").length, 3);
+  assert.strictEqual(tela.doc.querySelectorAll("#corpo-trip tr").length, 3);
+  assert.match(tela.doc.querySelectorAll("#corpo-tres tr")[0].textContent, /_t1 = 5 \* 2/);
+  // A tripla referencia a instrução anterior como (1).
+  assert.match(tela.doc.querySelectorAll("#corpo-trip tr")[1].textContent, /\(1\)/);
+});
+
+test("clicar numa instrução destaca as três tabelas e o nó na AST", async () => {
+  const tela = await analisarPrecedencia();
+  const linhaTrip = tela.doc.querySelectorAll("#corpo-trip tr")[1]; // instrução 2 (ADICAO, id 5)
+  linhaTrip.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(tela.doc.querySelectorAll("#corpo-tres tr")[1].classList.contains("atual"), true);
+  assert.strictEqual(tela.doc.querySelectorAll("#corpo-quad tr")[1].classList.contains("atual"), true);
+  assert.strictEqual(linhaTrip.classList.contains("atual"), true);
+  const no = tela.doc.querySelector('#arvore-ast [data-id="5"]');
+  assert.strictEqual(no.getAttribute("aria-selected"), "true");
+});
+
+test("o passo a passo do intermediário avança e volta", async () => {
+  const tela = await analisarPrecedencia();
+  const info = tela.doc.getElementById("int-info");
+  assert.match(info.textContent, /Instrução 1 de 3/);
+  tela.doc.getElementById("int-proximo").dispatchEvent(tela.evento("click"));
+  assert.match(info.textContent, /Instrução 2 de 3: _t2 = 10 \+ _t1/);
+  tela.doc.getElementById("int-anterior").dispatchEvent(tela.evento("click"));
+  assert.match(info.textContent, /Instrução 1 de 3/);
+});
+
+test("a reprodução do intermediário avança até a última instrução", async () => {
+  const relogio = temporizadorFalso();
+  const tela = montarTela(respostaPrecedencia, relogio);
+  tela.campo.value = "int resultado = 10 + 5 * 2;";
+  await clicarEAguardar(tela);
+  const reproduzir = tela.doc.getElementById("int-reproduzir");
+  reproduzir.dispatchEvent(tela.evento("click"));
+  assert.strictEqual(reproduzir.textContent, "Pausar");
+  let seguranca = 20;
+  while (relogio.funcao && seguranca-- > 0) relogio.funcao();
+  assert.match(tela.doc.getElementById("int-info").textContent, /Instrução 3 de 3/);
+  assert.strictEqual(reproduzir.textContent, "Reproduzir");
+});
+
+test("sem análise válida, o intermediário mostra a situação e esconde as tabelas", async () => {
+  const tela = montarTela(respostaComErro);
+  tela.campo.value = "int a = 5 @ 2;";
+  await clicarEAguardar(tela);
+  assert.strictEqual(tela.doc.getElementById("int-conteudo").hidden, true);
+  assert.match(tela.doc.getElementById("int-situacao").textContent, /análise sintática/);
 });
 
 // Teste de segurança

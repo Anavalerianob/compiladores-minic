@@ -30,6 +30,10 @@ const EXEMPLOS = {
   erro_sintatico: {
     titulo: "Exemplo 8: Código com erros sintáticos",
     codigo: "int a = 10;\nif (a > 0 {\n    a = 1;\n}\nb = ;"
+  },
+  intermediario: {
+    titulo: "Exemplo 9: Código intermediário (temporários e triplas)",
+    codigo: "x = a + b * c - d;\ny = x / e;"
   }
 };
 
@@ -248,7 +252,7 @@ async function enviarCodigo(codigo, fetchFn) {
     return {
       tipo: dados.sucesso && !erroSintatico ? "sucesso" : "erro",
       texto: dados.mensagem + " Linhas: " + dados.linhas + ". Caracteres: " + dados.caracteres + ".",
-      analise: { codigo: codigo, tokens: dados.tokens, erros: dados.erros, sintatico: sintatico }
+      analise: { codigo: codigo, tokens: dados.tokens, erros: dados.erros, sintatico: sintatico, intermediario: dados.intermediario || null }
     };
   }
   if (resposta.status === 400 && dados && dados.erro) {
@@ -343,18 +347,36 @@ function iniciar(doc, fetchFn, temporizador) {
   const iaEnviar = doc.getElementById("ia-enviar");
   const iaSugestoes = doc.getElementById("ia-sugestoes");
 
+  // Código intermediário.
+  const intSituacao = doc.getElementById("int-situacao");
+  const intConteudo = doc.getElementById("int-conteudo");
+  const corpoTres = doc.getElementById("corpo-tres");
+  const corpoQuad = doc.getElementById("corpo-quad");
+  const corpoTrip = doc.getElementById("corpo-trip");
+  const intAnteriorBtn = doc.getElementById("int-anterior");
+  const intProximoBtn = doc.getElementById("int-proximo");
+  const intReproduzirBtn = doc.getElementById("int-reproduzir");
+  const intVelocidade = doc.getElementById("int-velocidade");
+  const intInfo = doc.getElementById("int-info");
+
   // Abas dos resultados (reorganização do layout; não altera o comportamento).
   const abas = doc.getElementById("abas");
   const placeholderResultados = doc.getElementById("resultados-placeholder");
   const ABAS = [
     { tab: "aba-tokens", painel: "painel-tokens", nome: "tokens" },
     { tab: "aba-arvore", painel: "painel-arvore", nome: "arvore" },
+    { tab: "aba-intermediario", painel: "painel-intermediario", nome: "intermediario" },
     { tab: "aba-erros", painel: "painel-erros", nome: "erros" },
     { tab: "aba-ia", painel: "painel-ia", nome: "ia" }
   ];
 
   let analise = null;
   let iaOcupado = false;
+
+  // Estado do código intermediário.
+  let intermediarioDados = null;
+  let intAtual = -1;
+  let intReproducao = null;
   let atual = -1;
   let reproducao = null;
 
@@ -569,6 +591,7 @@ function iniciar(doc, fetchFn, temporizador) {
       atualizarInfo();
     }
     exibirSintatico(dados.sintatico);
+    exibirIntermediario(dados.intermediario);
 
     // Reorganiza em abas: após analisar, abre "Erros" se houver erro, senão "Árvore (AST)".
     const nLexico = analise.erros.length;
@@ -581,9 +604,11 @@ function iniciar(doc, fetchFn, temporizador) {
   function ocultarAnalise() {
     pausar();
     astPausar();
+    intPausar();
     analise = null;
     atual = -1;
     astRaiz = null;
+    intermediarioDados = null;
     secao.hidden = true;
     secaoSintatica.hidden = true;
     atualizarContadorErros(0);
@@ -1063,6 +1088,141 @@ function iniciar(doc, fetchFn, temporizador) {
     if (tab && typeof tab.focus === "function") tab.focus();
   }
 
+  // ----- Código intermediário -----
+
+  function valorCelula(v) {
+    return v === null || v === undefined ? "" : String(v);
+  }
+
+  function linhaInt(indice, celulas) {
+    const linha = elemento("tr");
+    linha.dataset.indice = String(indice);
+    linha.tabIndex = 0;
+    for (const texto of celulas) linha.appendChild(elemento("td", valorCelula(texto)));
+    linha.addEventListener("click", function () { intPausar(); selecionarInstrucao(indice); });
+    linha.addEventListener("keydown", function (evento) {
+      if (evento.key === "Enter" || evento.key === " ") {
+        evento.preventDefault();
+        intPausar();
+        selecionarInstrucao(indice);
+      }
+    });
+    return linha;
+  }
+
+  function renderizarTabelasInt() {
+    const tres = intermediarioDados.tres_enderecos;
+    const quad = intermediarioDados.quadruplas;
+    const trip = intermediarioDados.triplas;
+    corpoTres.replaceChildren.apply(corpoTres, tres.map(function (ins, i) {
+      return linhaInt(i, [i + 1, ins.texto]);
+    }));
+    corpoQuad.replaceChildren.apply(corpoQuad, quad.map(function (q, i) {
+      return linhaInt(i, [i + 1, q.op, q.arg1, q.arg2, q.resultado]);
+    }));
+    corpoTrip.replaceChildren.apply(corpoTrip, trip.map(function (t, i) {
+      return linhaInt(i, [t.numero, t.op, t.arg1, t.arg2]);
+    }));
+  }
+
+  function totalInstrucoes() {
+    return intermediarioDados ? intermediarioDados.tres_enderecos.length : 0;
+  }
+
+  function selecionarInstrucao(indice, cruzar) {
+    if (indice < 0 || indice >= totalInstrucoes()) return;
+    intAtual = indice;
+    for (const el of intConteudo.querySelectorAll("tr.atual")) {
+      el.classList.remove("atual");
+      el.removeAttribute("aria-current");
+    }
+    const seletor = 'tr[data-indice="' + indice + '"]';
+    for (const corpo of [corpoTres, corpoQuad, corpoTrip]) {
+      const linha = corpo.querySelector(seletor);
+      if (linha) {
+        linha.classList.add("atual");
+        linha.setAttribute("aria-current", "true");
+      }
+    }
+    // Ao interagir, destaca o nó correspondente na AST e o trecho no código.
+    // Na exibição inicial (cruzar === false) não mexe na seleção da árvore.
+    if (cruzar !== false) {
+      const no = intermediarioDados.tres_enderecos[indice].no;
+      if (no !== null && no !== undefined && nosPorId[no]) selecionarNo(no);
+    }
+    atualizarInfoInt();
+    atualizarControlesInt();
+  }
+
+  function atualizarInfoInt() {
+    const n = totalInstrucoes();
+    const ins = intermediarioDados.tres_enderecos[intAtual];
+    intInfo.replaceChildren(elemento("p",
+      "Instrução " + (intAtual + 1) + " de " + n + ": " + ins.texto));
+  }
+
+  function atualizarControlesInt() {
+    const n = totalInstrucoes();
+    intAnteriorBtn.setAttribute("aria-disabled", String(intAtual <= 0));
+    intProximoBtn.setAttribute("aria-disabled", String(intAtual >= n - 1));
+    intReproduzirBtn.setAttribute("aria-disabled", String(n === 0));
+  }
+
+  function intPausar() {
+    if (intReproducao !== null) {
+      relogio.limpar(intReproducao);
+      intReproducao = null;
+    }
+    intReproduzirBtn.textContent = "Reproduzir";
+    intReproduzirBtn.setAttribute("aria-pressed", "false");
+  }
+
+  function intAvancar() { intPausar(); selecionarInstrucao(intAtual + 1); }
+  function intVoltar() { intPausar(); selecionarInstrucao(intAtual - 1); }
+
+  function intPassoAutomatico() {
+    if (intAtual < totalInstrucoes() - 1) selecionarInstrucao(intAtual + 1);
+    if (intAtual >= totalInstrucoes() - 1) intPausar();
+  }
+
+  function intAlternarReproducao() {
+    if (intReproducao !== null) { intPausar(); return; }
+    if (totalInstrucoes() === 0) return;
+    if (intAtual >= totalInstrucoes() - 1) selecionarInstrucao(0);
+    intReproducao = relogio.definir(intPassoAutomatico, VELOCIDADES[intVelocidade.value] || VELOCIDADES.normal);
+    intReproduzirBtn.textContent = "Pausar";
+    intReproduzirBtn.setAttribute("aria-pressed", "true");
+  }
+
+  function exibirIntermediario(dados) {
+    intPausar();
+    intermediarioDados = dados || null;
+    intAtual = -1;
+    intInfo.replaceChildren();
+    if (!intermediarioDados || intermediarioDados.tres_enderecos.length === 0) {
+      intConteudo.hidden = true;
+      corpoTres.replaceChildren();
+      corpoQuad.replaceChildren();
+      corpoTrip.replaceChildren();
+      situacaoIntermediario();
+      return;
+    }
+    intSituacao.textContent = "";
+    intConteudo.hidden = false;
+    renderizarTabelasInt();
+    selecionarInstrucao(0, false);   // exibição inicial não mexe na seleção da árvore
+  }
+
+  function situacaoIntermediario() {
+    if (!intermediarioDados) {
+      intSituacao.textContent =
+        "O código intermediário é gerado quando a análise sintática tem sucesso. Corrija os erros e analise novamente.";
+    } else {
+      intSituacao.textContent =
+        "Este programa não gera instruções de código intermediário (por exemplo, declarações sem inicialização).";
+    }
+  }
+
   // Eventos
 
   anterior.addEventListener("click", voltar);
@@ -1103,6 +1263,16 @@ function iniciar(doc, fetchFn, temporizador) {
     if (tab) tab.addEventListener("click", function () { ativarAba(a.nome); });
   }
   abas.addEventListener("keydown", navegarAbas);
+
+  intAnteriorBtn.addEventListener("click", intVoltar);
+  intProximoBtn.addEventListener("click", intAvancar);
+  intReproduzirBtn.addEventListener("click", intAlternarReproducao);
+  intVelocidade.addEventListener("change", function () {
+    if (intReproducao !== null) {
+      relogio.limpar(intReproducao);
+      intReproducao = relogio.definir(intPassoAutomatico, VELOCIDADES[intVelocidade.value] || VELOCIDADES.normal);
+    }
+  });
 
   secao.addEventListener("keydown", function (evento) {
     if (evento.target.tagName === "SELECT" || !analise) return;

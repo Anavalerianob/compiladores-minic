@@ -237,6 +237,7 @@
         <option value="precedencia">Exemplo 6: Precedência e associatividade (AST)</option>
         <option value="aninhado">Exemplo 7: if, else if e else com blocos aninhados</option>
         <option value="erro_sintatico">Exemplo 8: Código com erros sintáticos</option>
+        <option value="intermediario">Exemplo 9: Código intermediário (temporários e triplas)</option>
       </select>
 
       <label for="codigo">Código-fonte</label>
@@ -254,6 +255,7 @@
       <div id="abas" class="abas" role="tablist" aria-label="Resultados da análise" hidden>
         <button id="aba-tokens" class="aba" type="button" role="tab" aria-selected="true" aria-controls="painel-tokens" tabindex="0">Tokens</button>
         <button id="aba-arvore" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-arvore" tabindex="-1">Árvore (AST)</button>
+        <button id="aba-intermediario" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-intermediario" tabindex="-1">Código intermediário</button>
         <button id="aba-erros" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-erros" tabindex="-1">Erros</button>
         <button id="aba-ia" class="aba" type="button" role="tab" aria-selected="false" aria-controls="painel-ia" tabindex="-1">Professor IA</button>
       </div>
@@ -366,6 +368,58 @@ primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao
         </section>
       </div>
 
+      <div id="painel-intermediario" class="painel" role="tabpanel" aria-labelledby="aba-intermediario" tabindex="0" hidden>
+        <h2 class="titulo-painel">Código intermediário</h2>
+        <details>
+          <summary>O que é código intermediário e as três formas</summary>
+          <p>Depois de construir a AST, o compilador gera um código intermediário: uma sequência de instruções simples, próximas de uma máquina, mas independentes de um processador específico. Cada operação usa um temporário novo (<code>_t1</code>, <code>_t2</code>, ...).</p>
+          <p>As três formas descrevem as mesmas instruções: o <strong>código de três endereços</strong> é a forma textual (<code>_t1 = b * c</code>); as <strong>quádruplas</strong> guardam (operador, argumento 1, argumento 2, resultado); as <strong>triplas</strong> guardam (operador, argumento 1, argumento 2) e, em vez de nomear o temporário, referenciam a instrução que o produziu como <code>(n)</code>.</p>
+        </details>
+
+        <div id="int-situacao" role="status" aria-live="polite"></div>
+
+        <section id="int-conteudo" hidden>
+          <h3>Construção passo a passo</h3>
+          <p>Use os botões ou as setas para percorrer as instruções. A instrução atual é destacada nas três tabelas, na árvore e no código.</p>
+          <div class="controles">
+            <button id="int-anterior" type="button">Anterior</button>
+            <button id="int-reproduzir" type="button" aria-pressed="false">Reproduzir</button>
+            <button id="int-proximo" type="button">Próximo</button>
+            <label for="int-velocidade">Velocidade</label>
+            <select id="int-velocidade">
+              <option value="lenta">Lenta</option>
+              <option value="normal" selected>Normal</option>
+              <option value="rapida">Rápida</option>
+            </select>
+          </div>
+          <div id="int-info" class="passo-info" aria-live="polite"></div>
+
+          <h3>Código de três endereços</h3>
+          <div class="tabela-container">
+            <table>
+              <thead><tr><th scope="col">#</th><th scope="col">Instrução</th></tr></thead>
+              <tbody id="corpo-tres"></tbody>
+            </table>
+          </div>
+
+          <h3>Quádruplas</h3>
+          <div class="tabela-container">
+            <table>
+              <thead><tr><th scope="col">#</th><th scope="col">Operador</th><th scope="col">Arg1</th><th scope="col">Arg2</th><th scope="col">Resultado</th></tr></thead>
+              <tbody id="corpo-quad"></tbody>
+            </table>
+          </div>
+
+          <h3>Triplas</h3>
+          <div class="tabela-container">
+            <table>
+              <thead><tr><th scope="col">Id</th><th scope="col">Op</th><th scope="col">Arg1</th><th scope="col">Arg2</th></tr></thead>
+              <tbody id="corpo-trip"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
       <div id="painel-erros" class="painel" role="tabpanel" aria-labelledby="aba-erros" tabindex="0" hidden>
         <h2 class="titulo-painel">Erros</h2>
         <h3>Erros léxicos</h3>
@@ -395,6 +449,6 @@ primaria        = IDENTIFICADOR | LITERAL_INTEIRO | LITERAL_REAL | "(" expressao
     </section>
   </main>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
