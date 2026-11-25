@@ -147,6 +147,7 @@ A etapa 4 não acrescentou dependências ao backend (Flask e pytest) nem ao fron
 │   ├── app.py               Rotas da API e tratamento de erros
 │   ├── scanner.py           Analisador léxico (scanner)
 │   ├── parser.py            Analisador sintático (parser) e construção da AST
+│   ├── intermediario.py     Geração de código intermediário a partir da AST
 │   ├── ia.py                Explicações com IA local (Ollama)
 │   ├── validacao.py         Validações da entrada recebida
 │   ├── requirements.txt
@@ -155,7 +156,8 @@ A etapa 4 não acrescentou dependências ao backend (Flask e pytest) nem ao fron
 │       ├── test_api.py      Testes da validação e dos endpoints
 │       ├── test_scanner.py  Testes do scanner
 │       ├── test_parser.py   Testes do parser e da AST
-│       └── test_ia.py       Testes da IA (com mock e integração real pulada)
+│       ├── test_ia.py       Testes da IA (com mock e integração real pulada)
+│       └── test_intermediario.py   Testes do código intermediário
 ├── frontend/
 │   ├── index.html           Tela principal
 │   ├── app.js               Exemplos, validação, comunicação, análise léxica, AST e IA
@@ -260,6 +262,8 @@ O bloco `sintatico` varia conforme o caso:
 
 A mensagem muda de acordo: "Análise léxica e sintática concluídas sem erros: N token(s) e M nó(s) na AST.", ou "Análise léxica sem erros; análise sintática com K erro(s).", ou a mensagem léxica seguida de "A análise sintática não foi executada.". O HTTP é 200 nos três casos; a troca de mensagem é uma alteração intencional de contrato, registrada em `docs/testes.md`. Entradas inválidas continuam 400, sem os blocos.
 
+A resposta inclui ainda o campo `intermediario`, gerado só quando a análise sintática tem sucesso (`null` com erro léxico ou sintático). Ele traz `tres_enderecos`, `quadruplas` e `triplas`, descrito na seção "Código intermediário".
+
 ### Explicação com IA
 
 O endpoint `POST /api/ia/explicar` recebe `{ "tipo", "codigo", "alvo", "pergunta" }`, onde `tipo` é `TOKEN`, `NO_AST`, `ERRO_SINTATICO`, `ERRO_LEXICO` ou `PERGUNTA`. O backend reexecuta o scanner e o parser sobre o código e monta o contexto a partir desse resultado, sem confiar em tokens ou AST enviados pelo navegador. A resposta 200 é `{ "explicacao", "modelo", "geradoPorIA" }`; os códigos 400, 502, 503 e 504 indicam, respectivamente, entrada inválida, resposta inválida do Ollama, Ollama indisponível e tempo esgotado, sempre sem expor endereço ou porta. Os detalhes estão na seção "Explicações com IA (Ollama)".
@@ -331,6 +335,25 @@ Quanto à acessibilidade e ao uso em celular, a categoria de cada token é sempr
 | Resposta fora do contrato ou erro inesperado | Frontend e backend | Mensagem genérica, sem detalhes internos |
 
 Código com erros de sintaxe, mas formado apenas por tokens válidos, é analisado sem erros léxicos, uma vez que a detecção de erros sintáticos será implementada na etapa 4.
+
+## Código intermediário
+
+Como diferencial, o sistema gera código intermediário a partir da AST, em `backend/intermediario.py`. A função `gerar_intermediario(ast)` é chamada só quando a análise sintática tem sucesso. Ela percorre a AST em pós-ordem, da esquerda para a direita; cada operação (adição, subtração, multiplicação, divisão, comparação e menos unário) gera um temporário novo (`_t1`, `_t2`, ...), e os condicionais usam rótulos sequenciais (`L1`, `L2`, ...). Não há análise semântica: a geração apenas reflete a estrutura reconhecida pelo parser.
+
+São produzidas três formas equivalentes da mesma sequência de instruções, todas com o mesmo tamanho e a mesma ordem (a posição i descreve a mesma instrução nas três):
+
+1. código de três endereços, a forma textual, como `_t1 = b * c`;
+2. quádruplas, com `(operador, argumento 1, argumento 2, resultado)`;
+3. triplas, com `(operador, argumento 1, argumento 2)`, em que um temporário é referenciado como `(n)`, a atribuição aparece como `(=, variável, valor ou (n))` e os desvios apontam para o número da instrução de destino.
+
+Cada instrução guarda o id do nó da AST que a gerou. Para `x = a + b * c - d;` seguido de `y = x / e;`, o sistema produz:
+
+```
+três endereços: _t1 = b * c | _t2 = a + _t1 | _t3 = _t2 - d | x = _t3 | _t4 = x / e | y = _t4
+triplas:        1 (*, b, c) | 2 (+, a, (1)) | 3 (-, (2), d) | 4 (=, x, (3)) | 5 (/, x, e) | 6 (=, y, (5))
+```
+
+Na interface, a aba "Código intermediário" mostra as três tabelas lado a lado. Ao clicar em uma instrução, a mesma instrução é destacada nas três tabelas, o nó correspondente na AST e o trecho no código. Há um passo a passo (Anterior, Próximo, Reproduzir), e as tabelas rolam na horizontal no celular.
 
 ## Explicações com IA (Ollama)
 
@@ -449,11 +472,12 @@ O teste da IA, manual, roda com `sh tests/ia.sh`, com os contêineres em execuç
 |---|---|---|
 | Backend: scanner (regressão) | 77 | 0 |
 | Backend: parser e AST | 47 | 0 |
-| Backend: validação, endpoints e contrato da etapa 4 | 30 | 0 |
+| Backend: validação, endpoints e contrato (com `intermediario`) | 32 | 0 |
 | Backend: IA com mock (integração real pulada) | 22 | 0 |
-| Frontend: interface, AST e IA (comunicação simulada) | 83 | 0 |
+| Backend: código intermediário | 15 | 0 |
+| Frontend: interface, AST, IA e código intermediário (comunicação simulada) | 89 | 0 |
 
-A execução do backend resultou em 176 testes aprovados e 1 pulado por padrão, e a do frontend, em 83 aprovados. Com o modelo `llama3.2` instalado, a integração real do Ollama também foi executada (`OLLAMA_INTEGRACAO=1`), com 23 testes de IA aprovados, e o `tests/ia.sh` passou nas 4 verificações. A construção das imagens do zero, a subida dos contêineres e o teste de implantação (9 verificações) foram validados. O `docs/testes.md` traz o registro detalhado, as falhas encontradas, as correções, as alterações intencionais de contrato e a demonstração da IA.
+A execução do backend resultou em 193 testes aprovados e 1 pulado por padrão, e a do frontend, em 89 aprovados. Com o modelo `llama3.2` instalado, a integração real do Ollama também foi executada (`OLLAMA_INTEGRACAO=1`), com 23 testes de IA aprovados, e o `tests/ia.sh` passou nas 4 verificações. A construção das imagens do zero, a subida dos contêineres e o teste de implantação (9 verificações) foram validados. O `docs/testes.md` traz o registro detalhado, as falhas encontradas, as correções, as alterações intencionais de contrato e a demonstração da IA.
 
 ## Validação de instalação limpa
 

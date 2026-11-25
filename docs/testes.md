@@ -82,7 +82,7 @@ Os testes unitários desta etapa foram executados primeiro fora dos contêineres
 
 ### Validação em instalação limpa
 
-Foram executados, em sequência, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy`, o frontend com a porta `8080:80` publicada e o contêiner `ollama` em execução com a porta 11434 apenas interna (não publicada no host). Em seguida, `sh tests/implantacao.sh` apresentou as 9 verificações aprovadas, incluindo as duas novas (a análise de `int resultado = 10 + 5 * 2;` contém `MULTIPLICACAO` e a de `int x = 5` contém `ERRO_SINTATICO`), e `docker compose run --rm backend pytest -q` apresentou 176 testes aprovados e 1 pulado, com Python 3.12.
+Foram executados, em sequência, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram construídas do zero, e `docker compose ps` indicou o backend em execução com estado `healthy`, o frontend com a porta `8080:80` publicada e o contêiner `ollama` em execução com a porta 11434 apenas interna (não publicada no host). Em seguida, `sh tests/implantacao.sh` apresentou as 9 verificações aprovadas, incluindo as duas novas (a análise de `int resultado = 10 + 5 * 2;` contém `MULTIPLICACAO` e a de `int x = 5` contém `ERRO_SINTATICO`), e `docker compose run --rm backend pytest -q` apresentou 193 testes aprovados e 1 pulado, com Python 3.12.
 
 Antes de baixar o modelo, uma requisição a `POST /api/ia/explicar` respondeu HTTP 503 (assistente indisponível), e `POST /api/analisar` continuou respondendo normalmente, o que confirma que a análise não depende do Ollama.
 
@@ -145,13 +145,25 @@ A resposta não contém mais EXPRESSAO nem OP_RELACIONAL, descreve a árvore cor
 |---|---|---|---|---|
 | Scanner (regressão da etapa 3) | Unitário | `pytest -v tests/test_scanner.py` | 77 | 0 |
 | Parser: construções válidas, estrutura da AST das referências, precedência, associatividade, posições, ordem de criação, ids, casos de erro, recuperação, limite de aninhamento e integração com o scanner | Unitário | `pytest -v tests/test_parser.py` | 47 | 0 |
-| API: validação, endpoints, contrato da etapa 3 preservado e contrato da etapa 4 com `lexico` e `sintatico` | Endpoint e regressão | `pytest -v tests/test_api.py` | 30 | 0 |
+| API: validação, endpoints, contrato da etapa 3 preservado e contrato da etapa 4 com `lexico`, `sintatico` e `intermediario` | Endpoint e regressão | `pytest -v tests/test_api.py` | 32 | 0 |
 | IA: extração do conteúdo, aterramento do contexto (tipos exatos, nó marcado), system prompt, temperatura, limpeza de Markdown, 400, 502, 503, 504, mensagens sem endereço e regressão com IA indisponível | Unitário com mock | `pytest -v tests/test_ia.py` | 22 | 0 |
-| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA, abas do layout e limpeza de Markdown | Interface | `cd frontend && npm install && npm test` | 83 | 0 |
+| Código intermediário: referência do enunciado (três endereços, quádruplas e triplas), if/else, else if, menos unário, declarações e programa vazio | Unitário | `pytest -v tests/test_intermediario.py` | 15 | 0 |
+| Interface: léxica da etapa 3 (com mocks atualizados), AST navegável, seleção de nós, filtro, exportação, passo a passo, erros sintáticos, distinção léxico e sintático, árvore grande, explicações com IA, abas do layout, limpeza de Markdown e código intermediário | Interface | `cd frontend && npm install && npm test` | 89 | 0 |
 
-A execução completa do backend (`pytest -v`) resultou em 176 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 83 testes aprovados e 0 reprovados. Total automatizado desta execução: 259 testes aprovados, 0 reprovados e 1 pulado.
+A execução completa do backend (`pytest -v`) resultou em 193 testes aprovados, 0 reprovados e 1 pulado (a integração real do Ollama, pulada por padrão). O frontend (`npm test`) resultou em 89 testes aprovados e 0 reprovados. Total automatizado desta execução: 282 testes aprovados, 0 reprovados e 1 pulado.
 
-O conjunto de interface passou de 42 para 83 testes: 3 a mais porque o teste de carregamento é gerado para cada exemplo e foram acrescentados três exemplos, mais os testes da AST, da IA, das abas do novo layout e da limpeza de Markdown. O conjunto de API passou de 26 para 30: quatro testes novos do contrato da etapa 4. O conjunto da IA passou de 18 para 22, com os testes do aterramento do contexto.
+O conjunto de interface passou de 42 para 89 testes, com os testes da AST, da IA, das abas, da limpeza de Markdown e do código intermediário. O conjunto de API passou de 26 para 32: além dos quatro testes do contrato da etapa 4, dois do campo `intermediario`. O conjunto da IA passou de 18 para 22, com os testes do aterramento do contexto. O código intermediário acrescentou 15 testes próprios.
+
+### Código intermediário (diferencial)
+
+Acrescentei `backend/intermediario.py`, que gera código intermediário a partir da AST (três endereços, quádruplas e triplas), e o campo `intermediario` em `POST /api/analisar` (null com erro léxico ou sintático). A referência do enunciado foi conferida à mão e confirmada pela execução real do backend, pelo proxy em `http://localhost:8080`, para `x = a + b * c - d;` seguido de `y = x / e;`:
+
+```
+três endereços: _t1 = b * c | _t2 = a + _t1 | _t3 = _t2 - d | x = _t3 | _t4 = x / e | y = _t4
+triplas:        1 (*, b, c) | 2 (+, a, (1)) | 3 (-, (2), d) | 4 (=, x, (3)) | 5 (/, x, e) | 6 (=, y, (5))
+```
+
+Os testes cobrem essa referência (três formas), if/else, else if, menos unário, declaração com e sem inicialização e programa vazio, além dos testes de interface da aba nova (três tabelas, destaque cruzado nas três tabelas e no nó da AST, passo a passo e situação quando não há código intermediário). Não houve alteração de scanner nem de parser, e nenhuma dependência nova.
 
 ### Reorganização da interface
 
