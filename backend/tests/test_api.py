@@ -160,10 +160,10 @@ def test_analisar_contrato_completo(cliente):
     resposta = cliente.post("/api/analisar", json={"codigo": "int numero = 10;"})
     assert resposta.status_code == 200
     corpo = resposta.get_json()
-    # A etapa 4 acrescenta "lexico" e "sintatico"; os campos do topo sao preservados.
+    # A etapa 4 acrescenta "lexico", "sintatico" e "intermediario"; os campos do topo sao preservados.
     assert set(corpo) == {
         "recebido", "sucesso", "mensagem", "linhas", "caracteres", "tokens", "erros",
-        "lexico", "sintatico",
+        "lexico", "sintatico", "intermediario",
     }
     assert corpo["recebido"] is True
     assert corpo["sucesso"] is True
@@ -281,6 +281,25 @@ def test_analisar_erro_lexico_nao_executa_sintatico(cliente):
     assert sint["erros"] == []
     assert "erros léxicos" in sint["motivo"]
     assert corpo["mensagem"].endswith("A análise sintática não foi executada.")
+    assert corpo["intermediario"] is None
+
+
+def test_analisar_valido_tem_intermediario(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int resultado = 10 + 5 * 2;"})
+    assert resposta.status_code == 200
+    inter = resposta.get_json()["intermediario"]
+    assert set(inter) == {"tres_enderecos", "quadruplas", "triplas"}
+    assert [i["texto"] for i in inter["tres_enderecos"]] == [
+        "_t1 = 5 * 2", "_t2 = 10 + _t1", "resultado = _t2",
+    ]
+    assert len(inter["quadruplas"]) == len(inter["triplas"]) == 3
+    assert inter["quadruplas"][0]["op"] == "*"
+    assert inter["triplas"][1]["arg2"] == "(1)"
+
+
+def test_analisar_erro_sintatico_intermediario_nulo(cliente):
+    resposta = cliente.post("/api/analisar", json={"codigo": "int x = 5"})
+    assert resposta.get_json()["intermediario"] is None
 
 
 def test_excecao_no_parser_vira_500_sem_detalhes(cliente, monkeypatch):

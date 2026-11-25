@@ -3,6 +3,7 @@ from werkzeug.exceptions import HTTPException
 
 from scanner import analisar as analisar_lexico
 from parser import analisar_sintaxe
+from intermediario import gerar_intermediario
 from validacao import validar_requisicao
 import ia
 
@@ -47,6 +48,7 @@ def analisar():
     erros = resultado["erros"]
 
     lexico = {"sucesso": not erros, "tokens": tokens, "erros": erros}
+    intermediario = None   # só é gerado quando a análise sintática tem sucesso
 
     if erros:
         # Com erros lexicos, o parser nao e executado: tokens faltando gerariam
@@ -71,6 +73,7 @@ def analisar():
             "erros": analise["erros"],
         }
         if analise["sucesso"]:
+            intermediario = gerar_intermediario(analise["ast"])
             nos = _contar_nos(analise["ast"])
             mensagem = (
                 "Análise léxica e sintática concluídas sem erros: "
@@ -92,6 +95,7 @@ def analisar():
         erros=erros,
         lexico=lexico,
         sintatico=sintatico,
+        intermediario=intermediario,
     ), 200
 
 
